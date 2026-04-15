@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Prisma } from "@prisma/client";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import type { PublicAppearance } from "@/lib/tournament-theme";
 import { slugify } from "@/lib/slug";
 import { deleteTournamentBlobAssets, uploadPublicImage } from "@/lib/uploads";
 import { generateBracket, resetMatchResult, setMatchWinner } from "@/lib/tournament-bracket";
@@ -108,6 +110,11 @@ export async function updateTournamentMeta(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   let slug = String(formData.get("slug") ?? "").trim();
+  const rawAppearance = String(formData.get("publicAppearance") ?? "");
+  const appearance: PublicAppearance =
+    rawAppearance === "light" || rawAppearance === "dark" || rawAppearance === "neon"
+      ? rawAppearance
+      : "light";
   if (!id || !name) throw new Error("Invalid");
   const before = await prisma.tournament.findUnique({
     where: { id },
@@ -116,7 +123,11 @@ export async function updateTournamentMeta(formData: FormData) {
   if (slug) slug = slugify(slug);
   await prisma.tournament.update({
     where: { id },
-    data: { name, ...(slug ? { slug } : {}) },
+    data: {
+      name,
+      ...(slug ? { slug } : {}),
+      theme: { appearance },
+    },
   });
   revalidatePath("/admin/tournaments");
   revalidatePath(`/admin/tournaments/${id}`);
@@ -201,6 +212,41 @@ export async function setTeamSeed(formData: FormData) {
   const seedOrder = parseInt(String(formData.get("seedOrder") ?? ""), 10);
   if (!id || Number.isNaN(seedOrder)) throw new Error("Invalid");
   await prisma.team.update({ where: { id }, data: { seedOrder } });
+  revalidatePath(`/admin/tournaments/${tournamentId}`);
+  await revalidateTournamentPublic(tournamentId);
+}
+
+const reorderTeamSeedsSchema = z.object({
+  tournamentId: z.string().min(1),
+  orderedTeamIds: z.array(z.string().min(1)).min(1),
+});
+
+export async function reorderTeamSeeds(tournamentId: string, orderedTeamIds: string[]) {
+  const parsed = reorderTeamSeedsSchema.safeParse({ tournamentId, orderedTeamIds });
+  if (!parsed.success) throw new Error("Invalid");
+
+  const existing = await prisma.team.findMany({
+    where: { tournamentId: parsed.data.tournamentId },
+    select: { id: true },
+  });
+  const expected = new Set(existing.map((t) => t.id));
+  if (parsed.data.orderedTeamIds.length !== expected.size) throw new Error("Invalid");
+  if (new Set(parsed.data.orderedTeamIds).size !== parsed.data.orderedTeamIds.length) {
+    throw new Error("Invalid");
+  }
+  for (const id of parsed.data.orderedTeamIds) {
+    if (!expected.has(id)) throw new Error("Invalid");
+  }
+
+  await prisma.$transaction(
+    parsed.data.orderedTeamIds.map((id, index) =>
+      prisma.team.update({
+        where: { id },
+        data: { seedOrder: index + 1 },
+      }),
+    ),
+  );
+
   revalidatePath(`/admin/tournaments/${tournamentId}`);
   await revalidateTournamentPublic(tournamentId);
 }

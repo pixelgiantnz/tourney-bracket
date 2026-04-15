@@ -1,18 +1,17 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AdminDisclosure } from "@/components/admin-disclosure";
+import { AdminSortableTeamsList } from "@/components/admin-sortable-teams-list";
 import { DeleteTournamentForm } from "@/components/delete-tournament-form";
 import { PendingSubmitButton } from "@/components/pending-submit-button";
 import { prisma } from "@/lib/prisma";
+import { parsePublicAppearance } from "@/lib/tournament-theme";
 import {
   createTeam,
-  deleteTeam,
   generateBracketAction,
   resetMatchResultAction,
-  saveTeamRoster,
   setMatchWinnerAction,
-  setTeamSeed,
-  updateTeamName,
   updateTournamentMeta,
   uploadTournamentAsset,
 } from "@/lib/actions/admin";
@@ -78,9 +77,8 @@ export default async function TournamentAdminPage({
         {tournament.status}
       </p>
 
-      <section className="mt-10 rounded-lg border border-border bg-card p-4">
-        <h2 className="font-medium">Details</h2>
-        <form action={updateTournamentMeta} className="mt-4 grid gap-3 sm:grid-cols-2">
+      <AdminDisclosure title="Details">
+        <form action={updateTournamentMeta} className="grid gap-3 sm:grid-cols-2">
           <input type="hidden" name="id" value={tournament.id} />
           <label className="text-sm">
             Name
@@ -97,6 +95,21 @@ export default async function TournamentAdminPage({
               defaultValue={tournament.slug}
               className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
             />
+          </label>
+          <label className="text-sm sm:col-span-2">
+            Public bracket theme
+            <select
+              name="publicAppearance"
+              defaultValue={parsePublicAppearance(tournament.theme)}
+              className="mt-1 block w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm"
+            >
+              <option value="light">Light (default)</option>
+              <option value="dark">Dark</option>
+              <option value="neon">Neon (retro)</option>
+            </select>
+            <span className="mt-1 block text-xs text-muted">
+              Public /t/… page only; light matches the rest of the site; neon is a dark synthwave-style bracket.
+            </span>
           </label>
           <div className="sm:col-span-2">
             <PendingSubmitButton className="text-sm text-accent underline">Save details</PendingSubmitButton>
@@ -162,14 +175,12 @@ export default async function TournamentAdminPage({
             </div>
           </form>
         </div>
-      </section>
+      </AdminDisclosure>
 
-      <section className="mt-10">
-        <h2 className="font-medium">Teams</h2>
-        <p className="mt-1 text-sm text-muted">
-          Each team needs {tournament.playersPerTeam} player(s). Pick players in the slots below, then use{" "}
-          <strong className="text-foreground">Save roster</strong> once per team. Seed order controls bracket placement
-          (lower = stronger seed). Leave a slot as — to clear it.
+      <AdminDisclosure title="Teams">
+        <p className="text-sm text-muted">
+          Each team needs {tournament.playersPerTeam} player(s). Drag the handle (⋮⋮) to set seed order (top = seed 1).
+          Expand a team to assign players or set seed by number. Leave a slot as — to clear it.
         </p>
         <form action={createTeam} className="mt-4 flex flex-wrap gap-2">
           <input type="hidden" name="tournamentId" value={tournament.id} />
@@ -184,82 +195,25 @@ export default async function TournamentAdminPage({
           </PendingSubmitButton>
         </form>
 
-        <ul className="mt-6 space-y-8">
-          {tournament.teams.map((team) => (
-            <li key={team.id} className="rounded-lg border border-border p-4">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <form action={updateTeamName} className="flex flex-wrap items-center gap-2">
-                  <input type="hidden" name="id" value={team.id} />
-                  <input type="hidden" name="tournamentId" value={tournament.id} />
-                  <input
-                    name="name"
-                    defaultValue={team.name}
-                    className="rounded-md border border-border bg-background px-2 py-1 text-sm font-medium"
-                  />
-                  <PendingSubmitButton className="text-xs text-accent underline">Save</PendingSubmitButton>
-                </form>
-                <form action={setTeamSeed} className="flex items-center gap-2 text-sm">
-                  <input type="hidden" name="id" value={team.id} />
-                  <input type="hidden" name="tournamentId" value={tournament.id} />
-                  <label>
-                    Seed{" "}
-                    <input
-                      name="seedOrder"
-                      type="number"
-                      min={1}
-                      defaultValue={team.seedOrder ?? ""}
-                      placeholder="—"
-                      className="w-16 rounded border border-border bg-background px-1 py-0.5"
-                    />
-                  </label>
-                  <PendingSubmitButton className="text-xs text-accent underline">Set</PendingSubmitButton>
-                </form>
-                <form action={deleteTeam}>
-                  <input type="hidden" name="id" value={team.id} />
-                  <input type="hidden" name="tournamentId" value={tournament.id} />
-                  <PendingSubmitButton className="text-xs text-red-400 hover:underline">
-                    Remove team
-                  </PendingSubmitButton>
-                </form>
-              </div>
-              <form
-                key={`${team.id}-roster-${Array.from({ length: tournament.playersPerTeam }, (__, i) => team.teamPlayers.find((x) => x.slotIndex === i)?.playerId ?? "").join(".")}`}
-                action={saveTeamRoster}
-                className="mt-4 space-y-4"
-              >
-                <input type="hidden" name="teamId" value={team.id} />
-                <input type="hidden" name="tournamentId" value={tournament.id} />
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {Array.from({ length: tournament.playersPerTeam }, (_, slotIndex) => {
-                    const tp = team.teamPlayers.find((x) => x.slotIndex === slotIndex);
-                    const selectedId = tp?.playerId ?? "";
-                    return (
-                      <label key={slotIndex} className="block text-sm">
-                        <span className="text-muted">Player {slotIndex + 1}</span>
-                        <select
-                          name={`slot_${slotIndex}`}
-                          defaultValue={selectedId}
-                          className="mt-1 block w-full max-w-full rounded-md border border-border bg-background px-2 py-1"
-                        >
-                          <option value="">—</option>
-                          {allPlayers.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    );
-                  })}
-                </div>
-                <PendingSubmitButton className="rounded-md border border-border bg-card px-4 py-2 text-sm font-medium hover:border-accent">
-                  Save roster
-                </PendingSubmitButton>
-              </form>
-            </li>
-          ))}
-        </ul>
-      </section>
+        <AdminSortableTeamsList
+          tournamentId={tournament.id}
+          playersPerTeam={tournament.playersPerTeam}
+          allPlayers={allPlayers.map((p) => ({ id: p.id, name: p.name }))}
+          teams={tournament.teams.map((team) => ({
+            id: team.id,
+            name: team.name,
+            seedOrder: team.seedOrder,
+            teamPlayers: team.teamPlayers.map((tp) => ({
+              slotIndex: tp.slotIndex,
+              player: {
+                id: tp.player.id,
+                name: tp.player.name,
+                avatarUrl: tp.player.avatarUrl,
+              },
+            })),
+          }))}
+        />
+      </AdminDisclosure>
 
       <section className="mt-10 rounded-lg border border-border bg-card p-4">
         <h2 className="font-medium">Bracket</h2>

@@ -10,6 +10,8 @@ export function nextPowerOf2(n: number): number {
 /**
  * Physical slot order for single elimination (first column).
  * perm[k] = seed index (0 .. P-1) at physical slot k.
+ * Spreads high seeds so favorites meet late — used when several byes are needed
+ * (avoids empty-vs-empty first-round matches).
  */
 export function eliminationSeedSlotOrder(size: number): number[] {
   if (size <= 1) return [0];
@@ -25,6 +27,17 @@ export function eliminationSeedSlotOrder(size: number): number[] {
   return out;
 }
 
+/**
+ * Adjacent seed order: slot 2k and 2k+1 are seeds k and k+1 (0-based),
+ * so seed 1 vs 2, 3 vs 4, … in round 1. Requires at most one bye slot (empty
+ * tail), otherwise use {@link eliminationSeedSlotOrder} instead.
+ */
+export function adjacentSeedSlotOrder(size: number): number[] {
+  if (size <= 1) return [0];
+  if (size % 2 !== 0) throw new Error("size must be a power of 2");
+  return Array.from({ length: size }, (_, i) => i);
+}
+
 /** Map first-round slots to matches: each pair of adjacent slots is one match. */
 export function buildSlotsFromSeededTeams(
   teamIdsOrderedBySeed: string[],
@@ -32,7 +45,11 @@ export function buildSlotsFromSeededTeams(
   const T = teamIdsOrderedBySeed.length;
   if (T === 0) return [];
   const P = nextPowerOf2(T);
-  const perm = eliminationSeedSlotOrder(P);
+  // With 2+ bye slots, pure adjacent order leaves an empty-vs-empty game; fall back.
+  const perm =
+    T >= P - 1
+      ? adjacentSeedSlotOrder(P)
+      : eliminationSeedSlotOrder(P);
   const slots: (string | null)[] = [];
   for (let k = 0; k < P; k++) {
     const seedIdx = perm[k];

@@ -1,12 +1,47 @@
 @import "tailwindcss";
 
+/* Default site shell: admin, home, login */
 :root {
+  --background: #f8f8fa;
+  --foreground: #141418;
+  --muted: #5f5f6c;
+  --border: #e4e4ea;
+  --card: #ffffff;
+  --accent: #2563eb;
+}
+
+/* Public tournament page when theme is dark */
+.theme-dark {
   --background: #0c0c0e;
   --foreground: #e8e8ea;
   --muted: #8a8a93;
   --border: #2a2a32;
   --card: #141418;
   --accent: #3b82f6;
+}
+
+/* Retro neon / synthwave public bracket */
+.theme-neon {
+  --background: #070a14;
+  --foreground: #ececf4;
+  --muted: #9ca3c8;
+  --border: #2a3144;
+  --card: #10151f;
+  --accent: #22d3ee;
+  color: var(--foreground);
+  background-color: #060714;
+  background-image:
+    radial-gradient(circle at 92% 92%, rgba(59, 130, 246, 0.07) 0%, transparent 42%),
+    repeating-radial-gradient(
+      circle at 88% 96%,
+      rgba(59, 130, 246, 0.06) 0,
+      rgba(59, 130, 246, 0.06) 1px,
+      transparent 1px,
+      transparent 4px
+    ),
+    linear-gradient(125deg, rgba(37, 99, 235, 0.22) 0%, transparent 42%),
+    linear-gradient(180deg, #0c1228 0%, #070b18 45%, #03050e 100%);
+  background-attachment: fixed;
 }
 
 @theme inline {

@@ -7,6 +7,7 @@ import {
   type BracketPlayer,
   type BracketTeam,
 } from "@/components/bracket-view";
+import { parsePublicAppearance } from "@/lib/tournament-theme";
 
 export const dynamic = "force-dynamic";
 
@@ -82,6 +83,7 @@ export default async function TournamentPublicPage({
 
   if (!tournament) notFound();
 
+  const appearance = parsePublicAppearance(tournament.theme);
   const ppt = tournament.playersPerTeam;
   const matches: BracketMatch[] = tournament.matches.map((m) => ({
     id: m.id,
@@ -115,16 +117,27 @@ export default async function TournamentPublicPage({
   }));
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:py-8">
-      <BracketView
-        tournament={{
-          name: tournament.name,
-          logoUrl: tournament.logoUrl,
-          trophyImageUrl: tournament.trophyImageUrl,
-          playersPerTeam: tournament.playersPerTeam,
-        }}
-        matches={matches}
-      />
+    <div
+      className={
+        appearance === "dark"
+          ? "theme-dark min-h-screen w-full bg-background text-foreground"
+          : appearance === "neon"
+            ? "theme-neon min-h-screen w-full text-foreground"
+            : "min-h-screen w-full bg-background text-foreground"
+      }
+    >
+      <div className="mx-auto w-full max-w-none px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+        <BracketView
+          appearance={appearance}
+          tournament={{
+            name: tournament.name,
+            logoUrl: tournament.logoUrl,
+            trophyImageUrl: tournament.trophyImageUrl,
+            playersPerTeam: tournament.playersPerTeam,
+          }}
+          matches={matches}
+        />
+      </div>
     </div>
   );
 }

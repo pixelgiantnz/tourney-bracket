@@ -3,6 +3,8 @@
 import Image from "next/image";
 import { useMemo } from "react";
 import { PlayerAvatar } from "@/components/player-avatar";
+import { getNeonChampionAccent, getNeonRoundAccent } from "@/lib/neon-round-accent";
+import type { PublicAppearance } from "@/lib/tournament-theme";
 
 export type BracketPlayer = {
   id: string;
@@ -32,54 +34,90 @@ export type BracketTournament = {
   playersPerTeam: number;
 };
 
-function TeamBlock({
+function teamPlayerNamesLine(team: BracketTeam, playersPerTeam: number): string {
+  const parts: string[] = [];
+  for (let i = 0; i < playersPerTeam; i++) {
+    const p = team.players[i];
+    parts.push(p ? p.name : "—");
+  }
+  return parts.join(" & ");
+}
+
+function TeamMatchSide({
   team,
   playersPerTeam,
   isWinner,
+  appearance,
 }: {
   team: BracketTeam | null;
   playersPerTeam: number;
   isWinner?: boolean;
+  appearance: PublicAppearance;
 }) {
+  const avatarSize = playersPerTeam > 2 ? 34 : 40;
+
   if (!team) {
     return (
-      <div className="flex justify-center">
-        <span className="text-muted">—</span>
+      <div
+        className={`flex min-h-[72px] min-w-0 flex-1 flex-col items-center justify-center rounded-md px-0.5 py-2 ${
+          appearance === "light" ? "bg-zinc-50/70" : "bg-zinc-950/35"
+        }`}
+      >
+        <span className={`text-sm ${appearance === "light" ? "text-zinc-400" : "text-muted"}`}>—</span>
       </div>
     );
   }
-  const size = 44;
+
+  const winnerShell =
+    appearance === "light"
+      ? "bg-emerald-50 ring-1 ring-emerald-200/90"
+      : "bg-emerald-500/15 ring-1 ring-emerald-500/50";
+
   return (
     <div
-      className={`flex flex-col items-center gap-0.5 rounded-md p-1 text-center transition-colors ${
-        isWinner ? "bg-emerald-500/15 ring-1 ring-emerald-500/50" : ""
+      className={`flex min-w-0 flex-1 flex-col items-center gap-1.5 rounded-md px-0.5 py-1 ${
+        isWinner ? winnerShell : ""
       }`}
     >
-      <span className="font-medium text-sm">{team.name}</span>
-      <div className="flex justify-center gap-1">
-        {Array.from({ length: playersPerTeam }, (_, i) => {
-          const p = team.players[i];
-          if (!p) {
-            return (
-              <div
-                key={i}
-                className="rounded-full border border-dashed border-border bg-background"
-                style={{ width: size, height: size }}
-              />
-            );
-          }
-          return (
-            <div key={p.id} style={{ width: size, height: size }}>
-              <PlayerAvatar name={p.name} url={p.avatarUrl} size={size} />
-            </div>
-          );
-        })}
+      <p
+        className={`line-clamp-2 w-full text-center text-[11px] font-semibold leading-tight sm:text-xs ${
+          appearance === "light" ? "text-zinc-900" : "text-foreground"
+        }`}
+      >
+        {team.name}
+      </p>
+      <div className="flex w-full flex-col items-center gap-1">
+        <div className="flex justify-center px-1">
+          <div className="flex -space-x-2 sm:-space-x-2.5">
+            {Array.from({ length: playersPerTeam }, (_, i) => {
+              const p = team.players[i];
+              return (
+                <div
+                  key={p?.id ?? `slot-${i}`}
+                  className="relative shrink-0 rounded-full"
+                  style={{ zIndex: playersPerTeam - i }}
+                >
+                  {p ? (
+                    <PlayerAvatar name={p.name} url={p.avatarUrl} size={avatarSize} />
+                  ) : (
+                    <div
+                      className="rounded-full border border-dotted border-border bg-transparent"
+                      style={{ width: avatarSize, height: avatarSize }}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <p
+          className={`line-clamp-3 w-full px-0.5 text-center text-[9px] leading-snug sm:text-[10px] ${
+            appearance === "light" ? "text-zinc-600" : "text-muted"
+          }`}
+        >
+          {teamPlayerNamesLine(team, playersPerTeam)}
+        </p>
       </div>
-      <ul className="text-xs text-muted">
-        {team.players.map((p) => (
-          <li key={p.id}>{p.name}</li>
-        ))}
-      </ul>
     </div>
   );
 }
@@ -88,44 +126,101 @@ function MatchCard({
   m,
   playersPerTeam,
   isFinalRound,
+  appearance,
+  roundIndex,
+  maxRound,
 }: {
   m: BracketMatch;
   playersPerTeam: number;
   isFinalRound: boolean;
+  appearance: PublicAppearance;
+  roundIndex: number;
+  maxRound: number;
 }) {
   const wid = m.winner?.id ?? null;
   const decided = Boolean(m.winner);
   const teamsReady = Boolean(m.teamA && m.teamB);
   const awaitingTeams = !teamsReady;
 
+  const neonGlow =
+    appearance === "neon" ? getNeonRoundAccent(roundIndex, maxRound).matchShellGlow : "";
+
+  const awaitingCls =
+    appearance === "light"
+      ? "border border-dotted border-zinc-300/90 bg-white text-zinc-500 shadow-sm"
+      : appearance === "neon"
+        ? `border border-dotted border-border/70 bg-card text-muted shadow-sm ${neonGlow}`
+        : "border border-dotted border-border/70 bg-card text-muted shadow-sm";
+  const decidedCls =
+    appearance === "light"
+      ? "border border-emerald-200 bg-emerald-50 text-zinc-900 shadow-sm"
+      : appearance === "neon"
+        ? `border border-emerald-500/60 bg-emerald-950/25 shadow-[0_0_20px_-8px_rgba(16,185,129,0.45)] ${neonGlow}`
+        : "border-emerald-500/60 bg-emerald-950/25 shadow-[0_0_20px_-8px_rgba(16,185,129,0.45)]";
+  const finalRing =
+    appearance === "light" ? "ring-1 ring-amber-400/35" : "ring-1 ring-amber-500/30";
+  const neutralCard =
+    appearance === "light"
+      ? "border border-zinc-200 bg-white text-zinc-900 shadow-sm"
+      : appearance === "neon"
+        ? `border-border bg-card ${neonGlow}`
+        : "border-border bg-card";
+  const winnerLine =
+    appearance === "light"
+      ? "mt-2 border-t border-emerald-500/35 pt-1.5 text-center text-xs font-medium text-emerald-700"
+      : "mt-2 border-t border-emerald-500/30 pt-1.5 text-center text-xs font-medium text-emerald-400";
+
+  /** No fill behind VS so the strip matches the match card surface (esp. neon). */
+  const vsStrip =
+    appearance === "light" ? "rounded-sm bg-zinc-50" : "";
+
+  const vsPill =
+    appearance === "light"
+      ? "bg-white text-zinc-500 shadow-sm ring-1 ring-zinc-200/80"
+      : awaitingTeams
+        ? "bg-card/80 text-muted shadow-sm ring-1 ring-border/50"
+        : appearance === "neon"
+          ? "bg-transparent text-muted ring-1 ring-cyan-400/35 shadow-[0_0_12px_-2px_rgba(34,211,238,0.2)]"
+          : "bg-background/90 text-muted";
+
   return (
     <div
-      className={`mx-auto w-full max-w-[min(100%,220px)] rounded-lg border p-2 text-center transition-colors ${
+      className={`w-full rounded-lg border p-2 transition-colors ${
         awaitingTeams
-          ? "border-border/50 bg-gradient-to-b from-zinc-900/40 via-zinc-900/20 to-card/90 text-muted-foreground shadow-none"
-          : decided
-            ? "border-emerald-500/60 bg-emerald-950/25 shadow-[0_0_20px_-8px_rgba(16,185,129,0.45)]"
-            : "border-border bg-card"
-      } ${isFinalRound && !decided && teamsReady ? "ring-1 ring-amber-500/30" : ""}`}
+          ? awaitingCls
+            : decided
+            ? decidedCls
+            : neutralCard
+      } ${isFinalRound && !decided && teamsReady ? finalRing : ""}`}
     >
-      <div className="space-y-2">
-        <TeamBlock
+      <div className="flex items-stretch gap-0">
+        <TeamMatchSide
           team={m.teamA}
           playersPerTeam={playersPerTeam}
           isWinner={wid !== null && m.teamA?.id === wid}
+          appearance={appearance}
         />
-        <div className="text-[10px] text-muted">vs</div>
-        <TeamBlock
+        <div
+          className={`relative flex min-w-[2.25rem] shrink-0 flex-col items-center justify-center self-stretch px-1.5 sm:min-w-[2.5rem] sm:px-2 ${vsStrip}`}
+        >
+          <span
+            aria-hidden
+            className="absolute bottom-0 left-1/2 top-0 z-0 w-px -translate-x-1/2 bg-border/65"
+          />
+          <span
+            className={`relative z-10 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${vsPill}`}
+          >
+            vs
+          </span>
+        </div>
+        <TeamMatchSide
           team={m.teamB}
           playersPerTeam={playersPerTeam}
           isWinner={wid !== null && m.teamB?.id === wid}
+          appearance={appearance}
         />
       </div>
-      {m.winner ? (
-        <p className="mt-2 border-t border-emerald-500/30 pt-1.5 text-center text-xs font-medium text-emerald-400">
-          Winner: {m.winner.name}
-        </p>
-      ) : null}
+      {m.winner ? <p className={winnerLine}>Winner: {m.winner.name}</p> : null}
     </div>
   );
 }
@@ -135,31 +230,75 @@ function ChampionColumn({
   trophyUrl,
   logoUrl,
   playersPerTeam,
+  appearance,
 }: {
   champion: BracketTeam | null;
   trophyUrl: string | null;
   logoUrl: string | null;
   playersPerTeam: number;
+  appearance: PublicAppearance;
 }) {
   const avatarSize = 112;
   const awaitingChampion = champion === null;
+
+  const champNeonGlow = appearance === "neon" ? getNeonChampionAccent().matchShellGlow : "";
+
+  const champAwaiting =
+    appearance === "light"
+      ? "border border-dotted border-zinc-300/90 bg-white text-zinc-500 shadow-sm"
+      : appearance === "neon"
+        ? `border border-dotted border-border/70 bg-card text-muted shadow-sm ${champNeonGlow}`
+        : "border border-dotted border-border/70 bg-card text-muted shadow-sm";
+  const champDecided =
+    appearance === "light"
+      ? "border border-emerald-200 bg-emerald-50/95 text-zinc-900 shadow-sm"
+      : appearance === "neon"
+        ? `border-emerald-500/50 bg-gradient-to-b from-emerald-950/55 via-emerald-950/30 to-card shadow-[0_0_40px_-12px_rgba(16,185,129,0.35)] ${champNeonGlow}`
+        : "border-emerald-500/50 bg-gradient-to-b from-emerald-950/55 via-emerald-950/30 to-card shadow-[0_0_40px_-12px_rgba(16,185,129,0.35)]";
+
+  const champTitle =
+    appearance === "light"
+      ? "text-emerald-900"
+      : "text-emerald-200 drop-shadow-[0_2px_12px_rgba(16,185,129,0.3)]";
+
+  const trophyDrop =
+    appearance === "light"
+      ? "relative h-[150px] w-[150px] object-contain drop-shadow-[0_4px_16px_rgba(15,118,110,0.12)] sm:h-[176px] sm:w-[176px]"
+      : "relative h-[150px] w-[150px] object-contain drop-shadow-[0_8px_28px_rgba(0,0,0,0.5)] sm:h-[176px] sm:w-[176px]";
+
+  const nameCls =
+    appearance === "light"
+      ? "mt-4 max-w-full text-base font-semibold leading-snug tracking-tight text-emerald-900 sm:text-lg"
+      : "mt-4 max-w-full text-base font-semibold leading-snug tracking-tight text-emerald-100 sm:text-lg";
+  const rosterCls =
+    appearance === "light"
+      ? "mt-2 space-y-0.5 text-sm text-emerald-800/90"
+      : "mt-2 space-y-0.5 text-sm text-emerald-200/80";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col justify-center py-0.5 pt-4">
       <div
         className={`relative rounded-2xl border-2 px-5 pb-5 pt-10 sm:px-7 sm:pb-6 sm:pt-11 md:px-9 md:pb-7 md:pt-12 ${
-          awaitingChampion
-            ? "border-border/50 bg-gradient-to-b from-zinc-900/40 via-zinc-900/20 to-card/90 text-muted-foreground shadow-none"
-            : "border-emerald-500/50 bg-gradient-to-b from-emerald-950/55 via-emerald-950/30 to-card shadow-[0_0_40px_-12px_rgba(16,185,129,0.35)]"
+          awaitingChampion ? champAwaiting : champDecided
         }`}
       >
         {logoUrl ? (
           <div className="pointer-events-none absolute left-1/2 top-[-1px] z-20 -translate-x-1/2 -translate-y-1/2">
             <div
-              className={`flex h-12 w-12 items-center justify-center rounded-xl border-2 bg-background shadow-lg ring-4 ring-background sm:h-14 sm:w-14 ${
+              className={`flex h-12 w-12 items-center justify-center rounded-xl border-2 shadow-lg sm:h-14 sm:w-14 ${
+                appearance === "light"
+                  ? "bg-white ring-4 ring-white"
+                  : appearance === "neon"
+                    ? "bg-card ring-4 ring-card"
+                    : "bg-background ring-4 ring-background"
+              } ${
                 awaitingChampion
                   ? "border-border/60 opacity-75 grayscale"
-                  : "border-emerald-500/60"
+                  : appearance === "light"
+                    ? "border-emerald-300"
+                    : appearance === "neon"
+                      ? "border-amber-400/50"
+                      : "border-emerald-500/60"
               }`}
             >
               <Image
@@ -176,8 +315,12 @@ function ChampionColumn({
         <p
           className={`text-center text-2xl font-black uppercase tracking-[0.1em] sm:text-3xl sm:tracking-[0.14em] ${
             awaitingChampion
-              ? "text-muted-foreground"
-              : "text-emerald-200 drop-shadow-[0_2px_12px_rgba(16,185,129,0.3)]"
+              ? appearance === "light"
+                ? "text-zinc-500"
+                : appearance === "neon"
+                  ? "text-amber-200 [text-shadow:0_0_28px_rgba(251,191,36,0.55),0_0_48px_rgba(245,158,11,0.2)]"
+                  : "text-muted"
+              : champTitle
           }`}
         >
           Champion
@@ -186,13 +329,20 @@ function ChampionColumn({
           <div className="mt-5 flex flex-col items-center text-center sm:mt-6">
             {trophyUrl ? (
               <div className="relative mx-auto shrink-0">
-                <div className="absolute -inset-6 bg-emerald-400/10 blur-2xl" aria-hidden />
+                <div
+                  className={
+                    appearance === "light"
+                      ? "absolute -inset-6 bg-emerald-400/20 blur-2xl"
+                      : "absolute -inset-6 bg-emerald-400/10 blur-2xl"
+                  }
+                  aria-hidden
+                />
                 <Image
                   src={trophyUrl}
                   alt=""
                   width={176}
                   height={176}
-                  className="relative h-[150px] w-[150px] object-contain drop-shadow-[0_8px_28px_rgba(0,0,0,0.5)] sm:h-[176px] sm:w-[176px]"
+                  className={trophyDrop}
                   unoptimized
                 />
               </div>
@@ -204,26 +354,28 @@ function ChampionColumn({
                   return (
                     <div
                       key={i}
-                      className="rounded-full border border-dashed border-emerald-500/40 bg-background/50"
+                      className={
+                        appearance === "light"
+                          ? "rounded-full border border-dotted border-emerald-200 bg-emerald-50/50"
+                          : "rounded-full border border-dotted border-emerald-500/40 bg-background/50"
+                      }
                       style={{ width: avatarSize, height: avatarSize }}
                     />
                   );
                 }
+                const ringCls =
+                  appearance === "light"
+                    ? "overflow-hidden rounded-full ring-2 ring-emerald-300/80"
+                    : "overflow-hidden rounded-full ring-2 ring-emerald-400/60";
                 return (
-                  <div
-                    key={p.id}
-                    className="overflow-hidden rounded-full ring-2 ring-emerald-400/60"
-                    style={{ width: avatarSize, height: avatarSize }}
-                  >
+                  <div key={p.id} className={ringCls} style={{ width: avatarSize, height: avatarSize }}>
                     <PlayerAvatar name={p.name} url={p.avatarUrl} size={avatarSize} />
                   </div>
                 );
               })}
             </div>
-            <p className="mt-4 max-w-full text-base font-semibold leading-snug tracking-tight text-emerald-100 sm:text-lg">
-              {champion.name}
-            </p>
-            <ul className="mt-2 space-y-0.5 text-sm text-emerald-200/80">
+            <p className={nameCls}>{champion.name}</p>
+            <ul className={rosterCls}>
               {champion.players.map((p) => (
                 <li key={p.id}>{p.name}</li>
               ))}
@@ -244,7 +396,6 @@ function ChampionColumn({
                 />
               </div>
             ) : null}
-            <p className={`text-center text-base text-muted ${trophyUrl ? "mt-5" : "mt-6"}`}>TBD</p>
           </div>
         )}
       </div>
@@ -261,9 +412,11 @@ function roundLabel(ri: number, maxRound: number): string {
 export function BracketView({
   tournament,
   matches,
+  appearance = "light",
 }: {
   tournament: BracketTournament;
   matches: BracketMatch[];
+  appearance?: PublicAppearance;
 }) {
   const { rounds, byRound, maxRound, champion } = useMemo(() => {
     const byRound = new Map<number, BracketMatch[]>();
@@ -281,18 +434,39 @@ export function BracketView({
     return { rounds, byRound, maxRound, champion };
   }, [matches]);
 
-  const colWidth = "w-[220px]";
+  const colWidth = "w-[300px] min-w-[280px]";
   const champColWidth = "w-[min(100%,360px)] min-w-[300px] sm:min-w-[340px]";
 
-  const headerBandH = "min-h-[80px]";
+  const headerSurface =
+    appearance === "light"
+      ? "mb-6 rounded-xl border border-zinc-200 bg-white px-4 py-4 shadow-sm sm:px-5"
+      : appearance === "neon"
+        ? "mb-6 rounded-xl border border-cyan-400/25 bg-card/90 px-4 py-4 shadow-[0_0_40px_-16px_rgba(34,211,238,0.15)] backdrop-blur-sm sm:px-5"
+        : "mb-6 rounded-lg border border-border/50 bg-card px-4 py-4 sm:px-5";
+
+  const roundHeading =
+    appearance === "light"
+      ? "shrink-0 text-center text-xs font-semibold uppercase tracking-wide text-zinc-500"
+      : "shrink-0 text-center text-xs font-semibold uppercase tracking-wide text-muted";
+
+  const roundHeadingNeonBase =
+    "shrink-0 text-center text-xs font-bold uppercase tracking-widest";
 
   return (
-    <div>
+    <div className="w-full">
       {/* Tournament header */}
-      <header className="mb-5 border-b border-border/80 bg-card/40 px-1 pb-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+      <header className={headerSurface}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           {tournament.logoUrl ? (
-            <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-border bg-background sm:h-20 sm:w-20">
+            <div
+              className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border sm:h-20 sm:w-20 ${
+                appearance === "light"
+                  ? "border-zinc-200 bg-white"
+                  : appearance === "neon"
+                    ? "border-cyan-400/35 bg-card"
+                    : "border-border bg-card"
+              }`}
+            >
               <Image
                 src={tournament.logoUrl}
                 alt=""
@@ -304,71 +478,113 @@ export function BracketView({
             </div>
           ) : null}
           <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">Tournament</p>
-            <h1 className="mt-0.5 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+            <p
+              className={`text-[10px] font-semibold uppercase tracking-widest ${
+                appearance === "light"
+                  ? "text-zinc-500"
+                  : appearance === "neon"
+                    ? "text-cyan-200/80 [text-shadow:0_0_10px_rgba(34,211,238,0.35)]"
+                    : "text-muted"
+              }`}
+            >
+              Tournament
+            </p>
+            <h1
+              className={`mt-0.5 text-2xl font-semibold tracking-tight sm:text-3xl ${
+                appearance === "light"
+                  ? "text-zinc-950"
+                  : appearance === "neon"
+                    ? "text-white [text-shadow:0_0_24px_rgba(34,211,238,0.35),0_0_48px_rgba(59,130,246,0.15)]"
+                    : "text-foreground"
+              }`}
+            >
               {tournament.name}
             </h1>
           </div>
         </div>
       </header>
 
-      <div className="overflow-x-auto pb-3">
-        {/* Round titles — final column no longer holds logo/trophy (moved to header & champion column) */}
-        <div className={`flex min-w-min flex-row gap-3`}>
-          {rounds.map((ri) => (
-            <div key={`head-${ri}`} className={`flex ${colWidth} shrink-0 flex-col`}>
-              <h2 className="shrink-0 text-center text-xs font-semibold uppercase tracking-wide text-muted">
-                {roundLabel(ri, maxRound)}
-              </h2>
-              <div className={`mt-2 ${headerBandH} shrink-0 border-b border-transparent pb-2`} aria-hidden />
-            </div>
-          ))}
-          <div className={`flex ${champColWidth} shrink-0 flex-col`}>
-            <h2 className="shrink-0 text-center text-xs font-semibold uppercase tracking-wide text-muted">
-              Champion
-            </h2>
-            <div className={`mt-2 ${headerBandH} shrink-0 border-b border-transparent pb-2`} aria-hidden />
-          </div>
-        </div>
-
-        <div className="mt-1 flex min-h-[min(64vh,720px)] min-w-min flex-row items-stretch gap-3">
-          {rounds.map((ri) => {
-            const roundMatches = (byRound.get(ri) ?? [])
-              .slice()
-              .sort((a, b) => a.positionInRound - b.positionInRound);
-            return (
-              <div
-                key={ri}
-                className={`flex ${colWidth} shrink-0 flex-col items-center border-l border-border/30 pl-3 first:border-l-0 first:pl-0`}
-              >
-                <div className="flex min-h-0 w-full flex-1 flex-col items-center">
-                  {roundMatches.map((m) => (
-                    <div
-                      key={m.id}
-                      className="flex min-h-0 w-full flex-1 flex-col items-center justify-center py-0.5"
-                    >
-                      <MatchCard
-                        m={m}
-                        playersPerTeam={tournament.playersPerTeam}
-                        isFinalRound={ri === maxRound}
-                      />
-                    </div>
-                  ))}
+      <div className="w-full overflow-x-auto pb-3">
+        <div className="mx-auto flex w-max min-w-min flex-col text-left">
+            {/* Round titles — final column no longer holds logo/trophy (moved to header & champion column) */}
+            <div className="flex min-w-min flex-row gap-3 pb-[30px]">
+              {rounds.map((ri) => (
+                <div key={`head-${ri}`} className={`flex ${colWidth} shrink-0 flex-col`}>
+                  <h2
+                    className={
+                      appearance === "neon"
+                        ? `${roundHeadingNeonBase} ${getNeonRoundAccent(ri, maxRound).labelClass}`
+                        : roundHeading
+                    }
+                  >
+                    {roundLabel(ri, maxRound)}
+                  </h2>
                 </div>
+              ))}
+              <div className={`flex ${champColWidth} shrink-0 flex-col`}>
+                <h2
+                  className={
+                    appearance === "neon"
+                      ? `${roundHeadingNeonBase} ${getNeonChampionAccent().labelClass}`
+                      : roundHeading
+                  }
+                >
+                  Champion
+                </h2>
               </div>
-            );
-          })}
+            </div>
 
-          <div
-            className={`flex ${champColWidth} shrink-0 flex-col border-l border-emerald-500/20 pl-3`}
-          >
-            <ChampionColumn
-              champion={champion}
-              trophyUrl={tournament.trophyImageUrl}
-              logoUrl={tournament.logoUrl}
-              playersPerTeam={tournament.playersPerTeam}
-            />
-          </div>
+            <div className="flex min-h-[min(64vh,720px)] min-w-min flex-row items-stretch gap-3">
+              {rounds.map((ri) => {
+                const roundMatches = (byRound.get(ri) ?? [])
+                  .slice()
+                  .sort((a, b) => a.positionInRound - b.positionInRound);
+                return (
+                  <div
+                    key={ri}
+                    className={`flex ${colWidth} shrink-0 flex-col items-center pl-3 first:border-l-0 first:pl-0 ${
+                      appearance === "neon"
+                        ? getNeonRoundAccent(ri, maxRound).columnClass
+                        : `border-l ${appearance === "light" ? "border-zinc-200/90" : "border-border/30"}`
+                    }`}
+                  >
+                    <div className="flex min-h-0 w-full flex-1 flex-col items-center">
+                      {roundMatches.map((m) => (
+                        <div
+                          key={m.id}
+                          className="flex min-h-0 w-full flex-1 flex-col items-center justify-center py-0.5"
+                        >
+                          <MatchCard
+                            m={m}
+                            playersPerTeam={tournament.playersPerTeam}
+                            isFinalRound={ri === maxRound}
+                            appearance={appearance}
+                            roundIndex={ri}
+                            maxRound={maxRound}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div
+                className={`flex ${champColWidth} shrink-0 flex-col pl-3 ${
+                  appearance === "neon"
+                    ? getNeonChampionAccent().columnClass
+                    : `border-l ${appearance === "light" ? "border-emerald-600/15" : "border-emerald-500/20"}`
+                }`}
+              >
+                <ChampionColumn
+                  champion={champion}
+                  trophyUrl={tournament.trophyImageUrl}
+                  logoUrl={tournament.logoUrl}
+                  playersPerTeam={tournament.playersPerTeam}
+                  appearance={appearance}
+                />
+              </div>
+            </div>
         </div>
       </div>
     </div>

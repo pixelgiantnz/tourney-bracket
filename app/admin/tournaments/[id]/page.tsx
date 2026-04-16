@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AdminMatchTeamAvatars } from "@/components/admin-match-team-avatars";
 import { AdminDisclosure } from "@/components/admin-disclosure";
 import { AdminSortableTeamsList } from "@/components/admin-sortable-teams-list";
 import { DeleteTournamentForm } from "@/components/delete-tournament-form";
@@ -36,8 +37,22 @@ export default async function TournamentAdminPage({
       matches: {
         orderBy: [{ roundIndex: "asc" }, { positionInRound: "asc" }],
         include: {
-          teamA: { include: { teamPlayers: { include: { player: true } } } },
-          teamB: { include: { teamPlayers: { include: { player: true } } } },
+          teamA: {
+            include: {
+              teamPlayers: {
+                include: { player: true },
+                orderBy: { slotIndex: "asc" },
+              },
+            },
+          },
+          teamB: {
+            include: {
+              teamPlayers: {
+                include: { player: true },
+                orderBy: { slotIndex: "asc" },
+              },
+            },
+          },
           winner: true,
         },
       },
@@ -213,28 +228,28 @@ export default async function TournamentAdminPage({
             })),
           }))}
         />
-      </AdminDisclosure>
 
-      <section className="mt-10 rounded-lg border border-border bg-card p-4">
-        <h2 className="font-medium">Bracket</h2>
-        <p className="mt-1 text-sm text-muted">
-          Generates a single-elimination bracket with byes if needed. Re-running replaces all matches.
-        </p>
-        <form action={generateBracketAction} className="mt-4">
-          <input type="hidden" name="tournamentId" value={tournament.id} />
-          <PendingSubmitButton
-            disabled={!canGenerate}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Generate / reset bracket
-          </PendingSubmitButton>
-          {!canGenerate ? (
-            <p className="mt-2 text-xs text-amber-400">
-              Need at least two teams and full rosters ({tournament.playersPerTeam} players each).
-            </p>
-          ) : null}
-        </form>
-      </section>
+        <div className="mt-8 border-t border-border pt-6">
+          <h3 className="text-sm font-medium">Bracket</h3>
+          <p className="mt-1 text-sm text-muted">
+            Generates a single-elimination bracket with byes if needed. Re-running replaces all matches.
+          </p>
+          <form action={generateBracketAction} className="mt-4">
+            <input type="hidden" name="tournamentId" value={tournament.id} />
+            <PendingSubmitButton
+              disabled={!canGenerate}
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Generate / reset bracket
+            </PendingSubmitButton>
+            {!canGenerate ? (
+              <p className="mt-2 text-xs text-amber-400">
+                Need at least two teams and full rosters ({tournament.playersPerTeam} players each).
+              </p>
+            ) : null}
+          </form>
+        </div>
+      </AdminDisclosure>
 
       {tournament.matches.length > 0 ? (
         <section className="mt-10">
@@ -254,7 +269,18 @@ export default async function TournamentAdminPage({
                         <span>{m.teamB?.name ?? "—"}</span>
                         {m.winner ? (
                           <span className="ml-auto flex flex-wrap items-center gap-2 text-muted">
-                            <span>Winner: {m.winner.name}</span>
+                            <span className="inline-flex items-center gap-2">
+                              <AdminMatchTeamAvatars
+                                team={
+                                  m.teamA && m.winner.id === m.teamA.id
+                                    ? m.teamA
+                                    : m.teamB && m.winner.id === m.teamB.id
+                                      ? m.teamB
+                                      : null
+                                }
+                              />
+                              <span>Winner: {m.winner.name}</span>
+                            </span>
                             <form action={resetMatchResultAction}>
                               <input type="hidden" name="matchId" value={m.id} />
                               <input type="hidden" name="tournamentId" value={tournament.id} />
@@ -270,7 +296,10 @@ export default async function TournamentAdminPage({
                               <input type="hidden" name="tournamentId" value={tournament.id} />
                               <input type="hidden" name="winnerTeamId" value={m.teamAId!} />
                               <PendingSubmitButton className="rounded border border-border px-2 py-1 text-xs">
-                                {m.teamA?.name} wins
+                                <span className="inline-flex items-center gap-2">
+                                  <AdminMatchTeamAvatars team={m.teamA} />
+                                  <span>{m.teamA?.name} wins</span>
+                                </span>
                               </PendingSubmitButton>
                             </form>
                             <form action={setMatchWinnerAction}>
@@ -278,7 +307,10 @@ export default async function TournamentAdminPage({
                               <input type="hidden" name="tournamentId" value={tournament.id} />
                               <input type="hidden" name="winnerTeamId" value={m.teamBId!} />
                               <PendingSubmitButton className="rounded border border-border px-2 py-1 text-xs">
-                                {m.teamB?.name} wins
+                                <span className="inline-flex items-center gap-2">
+                                  <AdminMatchTeamAvatars team={m.teamB} />
+                                  <span>{m.teamB?.name} wins</span>
+                                </span>
                               </PendingSubmitButton>
                             </form>
                           </span>

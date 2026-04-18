@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { prisma } from "@/lib/prisma";
 import {
   BracketView,
   type BracketMatch,
   type BracketPlayer,
   type BracketTeam,
 } from "@/components/bracket-view";
+import { bracketRoundLabel } from "@/lib/bracket-round-label";
+import { emptyPlayerMatchStats, getStatsForPlayerIds } from "@/lib/player-stats";
+import { prisma } from "@/lib/prisma";
 import { parsePublicAppearance } from "@/lib/tournament-theme";
 
 export const dynamic = "force-dynamic";
@@ -24,18 +26,20 @@ export async function generateMetadata({
   return { title: t?.name ?? "Tournament" };
 }
 
-function toBracketTeam(
-  t: {
-    id: string;
-    name: string;
-    teamPlayers: {
-      slotIndex: number;
-      player: { id: string; name: string; avatarUrl: string | null };
-    }[];
-  } | null,
+type TeamWithPlayers = {
+  id: string;
+  name: string;
+  teamPlayers: Array<{
+    slotIndex: number;
+    player: { id: string; name: string; avatarUrl: string | null; bio: string | null };
+  }>;
+};
+
+function bracketPlayersFromTeam(
+  t: TeamWithPlayers,
   playersPerTeam: number,
-): BracketTeam | null {
-  if (!t) return null;
+  statsMap: Awaited<ReturnType<typeof getStatsForPlayerIds>>,
+): BracketPlayer[] {
   const sorted = [...t.teamPlayers].sort((a, b) => a.slotIndex - b.slotIndex);
   const players: BracketPlayer[] = [];
   for (let i = 0; i < playersPerTeam; i++) {
@@ -45,20 +49,52 @@ function toBracketTeam(
         id: tp.player.id,
         name: tp.player.name,
         avatarUrl: tp.player.avatarUrl,
+        bio: tp.player.bio,
+        stats: statsMap.get(tp.player.id) ?? emptyPlayerMatchStats,
       });
     } else {
       players.push({
         id: `empty-${t.id}-${i}`,
         name: "?",
         avatarUrl: null,
+        bio: null,
+        stats: emptyPlayerMatchStats,
       });
     }
   }
+  return players;
+}
+
+function toBracketTeam(
+  t: TeamWithPlayers | null,
+  playersPerTeam: number,
+  statsMap: Awaited<ReturnType<typeof getStatsForPlayerIds>>,
+): BracketTeam | null {
+  if (!t) return null;
   return {
     id: t.id,
     name: t.name,
-    players,
+    players: bracketPlayersFromTeam(t, playersPerTeam, statsMap),
   };
+}
+
+function collectPlayerIds(tournament: {
+  matches: Array<{
+    teamA: TeamWithPlayers | null;
+    teamB: TeamWithPlayers | null;
+    winner: TeamWithPlayers | null;
+  }>;
+}): string[] {
+  const ids = new Set<string>();
+  for (const m of tournament.matches) {
+    for (const side of [m.teamA, m.teamB, m.winner]) {
+      if (!side) continue;
+      for (const tp of side.teamPlayers) {
+        ids.add(tp.player.id);
+      }
+    }
+  }
+  return [...ids];
 }
 
 export default async function TournamentPublicPage({
@@ -73,9 +109,30 @@ export default async function TournamentPublicPage({
       matches: {
         orderBy: [{ roundIndex: "asc" }, { positionInRound: "asc" }],
         include: {
-          teamA: { include: { teamPlayers: { include: { player: true } } } },
-          teamB: { include: { teamPlayers: { include: { player: true } } } },
-          winner: { include: { teamPlayers: { include: { player: true } } } },
+          teamA: {
+            include: {
+              teamPlayers: {
+                include: { player: true },
+                orderBy: { slotIndex: "asc" },
+              },
+            },
+          },
+          teamB: {
+            include: {
+              teamPlayers: {
+                include: { player: true },
+                orderBy: { slotIndex: "asc" },
+              },
+            },
+          },
+          winner: {
+            include: {
+              teamPlayers: {
+                include: { player: true },
+                orderBy: { slotIndex: "asc" },
+              },
+            },
+          },
         },
       },
     },
@@ -83,35 +140,25 @@ export default async function TournamentPublicPage({
 
   if (!tournament) notFound();
 
+  const statsMap = await getStatsForPlayerIds(collectPlayerIds(tournament));
+
   const appearance = parsePublicAppearance(tournament.theme);
   const ppt = tournament.playersPerTeam;
+  const maxRound = tournament.matches.length
+    ? Math.max(...tournament.matches.map((x) => x.roundIndex))
+    : 0;
   const matches: BracketMatch[] = tournament.matches.map((m) => ({
     id: m.id,
     roundIndex: m.roundIndex,
     positionInRound: m.positionInRound,
-    teamA: toBracketTeam(m.teamA, ppt),
-    teamB: toBracketTeam(m.teamB, ppt),
+    roundLabel: bracketRoundLabel(m.roundIndex, maxRound),
+    teamA: toBracketTeam(m.teamA, ppt, statsMap),
+    teamB: toBracketTeam(m.teamB, ppt, statsMap),
     winner: m.winner
       ? {
           id: m.winner.id,
           name: m.winner.name,
-          players: (() => {
-            const sorted = [...m.winner.teamPlayers].sort((a, b) => a.slotIndex - b.slotIndex);
-            const out: BracketPlayer[] = [];
-            for (let i = 0; i < ppt; i++) {
-              const tp = sorted.find((x) => x.slotIndex === i);
-              if (tp) {
-                out.push({
-                  id: tp.player.id,
-                  name: tp.player.name,
-                  avatarUrl: tp.player.avatarUrl,
-                });
-              } else {
-                out.push({ id: `w-${i}`, name: "?", avatarUrl: null });
-              }
-            }
-            return out;
-          })(),
+          players: bracketPlayersFromTeam(m.winner, ppt, statsMap),
         }
       : null,
   }));

@@ -1,15 +1,21 @@
 "use client";
 
 import Image from "next/image";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { MatchDetailModal } from "@/components/match-detail-modal";
 import { PlayerAvatar } from "@/components/player-avatar";
+import { bracketMatchGridLines } from "@/lib/bracket";
+import { bracketRoundLabel } from "@/lib/bracket-round-label";
 import { getNeonChampionAccent, getNeonRoundAccent } from "@/lib/neon-round-accent";
+import type { PlayerMatchStats } from "@/lib/player-stats";
 import type { PublicAppearance } from "@/lib/tournament-theme";
 
 export type BracketPlayer = {
   id: string;
   name: string;
   avatarUrl: string | null;
+  bio: string | null;
+  stats: PlayerMatchStats;
 };
 
 export type BracketTeam = {
@@ -22,6 +28,8 @@ export type BracketMatch = {
   id: string;
   roundIndex: number;
   positionInRound: number;
+  /** Same label as column headers (Final, Semifinals, Round n). */
+  roundLabel: string;
   teamA: BracketTeam | null;
   teamB: BracketTeam | null;
   winner: BracketTeam | null;
@@ -46,12 +54,10 @@ function teamPlayerNamesLine(team: BracketTeam, playersPerTeam: number): string 
 function TeamMatchSide({
   team,
   playersPerTeam,
-  isWinner,
   appearance,
 }: {
   team: BracketTeam | null;
   playersPerTeam: number;
-  isWinner?: boolean;
   appearance: PublicAppearance;
 }) {
   const avatarSize = playersPerTeam > 2 ? 34 : 40;
@@ -59,7 +65,7 @@ function TeamMatchSide({
   if (!team) {
     return (
       <div
-        className={`flex min-h-[72px] min-w-0 flex-1 flex-col items-center justify-center rounded-md px-0.5 py-2 ${
+        className={`flex min-h-[72px] min-w-0 flex-1 flex-col items-center justify-center rounded-md px-1.5 py-2 sm:px-2 ${
           appearance === "light" ? "bg-zinc-50/70" : "bg-zinc-950/35"
         }`}
       >
@@ -68,17 +74,8 @@ function TeamMatchSide({
     );
   }
 
-  const winnerShell =
-    appearance === "light"
-      ? "bg-emerald-50 ring-1 ring-emerald-200/90"
-      : "bg-emerald-500/15 ring-1 ring-emerald-500/50";
-
   return (
-    <div
-      className={`flex min-w-0 flex-1 flex-col items-center gap-1.5 rounded-md px-0.5 py-1 ${
-        isWinner ? winnerShell : ""
-      }`}
-    >
+    <div className="flex min-w-0 flex-1 flex-col items-center gap-1.5 rounded-md px-1.5 py-1.5 sm:px-2">
       <p
         className={`line-clamp-2 w-full text-center text-[11px] font-semibold leading-tight sm:text-xs ${
           appearance === "light" ? "text-zinc-900" : "text-foreground"
@@ -129,6 +126,7 @@ function MatchCard({
   appearance,
   roundIndex,
   maxRound,
+  onOpenDetail,
 }: {
   m: BracketMatch;
   playersPerTeam: number;
@@ -136,8 +134,8 @@ function MatchCard({
   appearance: PublicAppearance;
   roundIndex: number;
   maxRound: number;
+  onOpenDetail?: () => void;
 }) {
-  const wid = m.winner?.id ?? null;
   const decided = Boolean(m.winner);
   const teamsReady = Boolean(m.teamA && m.teamB);
   const awaitingTeams = !teamsReady;
@@ -167,12 +165,22 @@ function MatchCard({
         : "border-border bg-card";
   const winnerLine =
     appearance === "light"
-      ? "mt-2 border-t border-emerald-500/35 pt-1.5 text-center text-xs font-medium text-emerald-700"
-      : "mt-2 border-t border-emerald-500/30 pt-1.5 text-center text-xs font-medium text-emerald-400";
+      ? "relative z-10 mt-2 shrink-0 border-t border-emerald-500/35 bg-inherit px-1 pb-0.5 pt-2 text-center text-xs font-medium text-emerald-700"
+      : appearance === "neon"
+        ? "relative z-10 mt-2 shrink-0 border-t border-emerald-500/40 bg-inherit px-1 pb-0.5 pt-2 text-center text-xs font-medium text-emerald-400"
+        : "relative z-10 mt-2 shrink-0 border-t border-emerald-500/30 bg-inherit px-1 pb-0.5 pt-2 text-center text-xs font-medium text-emerald-400";
 
-  /** No fill behind VS so the strip matches the match card surface (esp. neon). */
+  /** Solid strip behind VS so the divider paints above team edges; tint follows card state. */
   const vsStrip =
-    appearance === "light" ? "rounded-sm bg-zinc-50" : "";
+    appearance === "light"
+      ? decided
+        ? "rounded-sm bg-emerald-50"
+        : "rounded-sm bg-zinc-50"
+      : decided
+        ? appearance === "neon"
+          ? "rounded-sm bg-emerald-950/40"
+          : "rounded-sm bg-emerald-950/35"
+        : "";
 
   const vsPill =
     appearance === "light"
@@ -183,29 +191,39 @@ function MatchCard({
           ? "bg-transparent text-muted ring-1 ring-cyan-400/35 shadow-[0_0_12px_-2px_rgba(34,211,238,0.2)]"
           : "bg-background/90 text-muted";
 
+  const interactive = Boolean(onOpenDetail);
+  const cardShell = `flex w-full flex-col rounded-lg border p-3 transition-colors ${
+    awaitingTeams ? awaitingCls : decided ? decidedCls : neutralCard
+  } ${isFinalRound && !decided && teamsReady ? finalRing : ""} ${
+    interactive ? "cursor-pointer outline-none hover:opacity-[0.97] focus-visible:ring-2 focus-visible:ring-accent" : ""
+  }`;
+
   return (
     <div
-      className={`w-full rounded-lg border p-2 transition-colors ${
-        awaitingTeams
-          ? awaitingCls
-            : decided
-            ? decidedCls
-            : neutralCard
-      } ${isFinalRound && !decided && teamsReady ? finalRing : ""}`}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      aria-label={interactive ? "Open match details" : undefined}
+      onClick={interactive ? () => onOpenDetail?.() : undefined}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onOpenDetail?.();
+              }
+            }
+          : undefined
+      }
+      className={cardShell}
     >
-      <div className="flex items-stretch gap-0">
-        <TeamMatchSide
-          team={m.teamA}
-          playersPerTeam={playersPerTeam}
-          isWinner={wid !== null && m.teamA?.id === wid}
-          appearance={appearance}
-        />
+      <div className="isolate flex items-stretch gap-2 sm:gap-2.5">
+        <TeamMatchSide team={m.teamA} playersPerTeam={playersPerTeam} appearance={appearance} />
         <div
-          className={`relative flex min-w-[2.25rem] shrink-0 flex-col items-center justify-center self-stretch px-1.5 sm:min-w-[2.5rem] sm:px-2 ${vsStrip}`}
+          className={`relative z-20 flex min-w-[2.5rem] shrink-0 flex-col items-center justify-center self-stretch px-1 sm:min-w-[2.75rem] sm:px-2 ${vsStrip}`}
         >
           <span
             aria-hidden
-            className="absolute bottom-0 left-1/2 top-0 z-0 w-px -translate-x-1/2 bg-border/65"
+            className="pointer-events-none absolute bottom-0 left-1/2 top-0 z-0 w-px -translate-x-1/2 bg-border/70"
           />
           <span
             className={`relative z-10 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${vsPill}`}
@@ -213,12 +231,7 @@ function MatchCard({
             vs
           </span>
         </div>
-        <TeamMatchSide
-          team={m.teamB}
-          playersPerTeam={playersPerTeam}
-          isWinner={wid !== null && m.teamB?.id === wid}
-          appearance={appearance}
-        />
+        <TeamMatchSide team={m.teamB} playersPerTeam={playersPerTeam} appearance={appearance} />
       </div>
       {m.winner ? <p className={winnerLine}>Winner: {m.winner.name}</p> : null}
     </div>
@@ -403,12 +416,6 @@ function ChampionColumn({
   );
 }
 
-function roundLabel(ri: number, maxRound: number): string {
-  if (ri === maxRound) return "Final";
-  if (ri === maxRound - 1 && maxRound >= 1) return "Semifinals";
-  return `Round ${ri + 1}`;
-}
-
 export function BracketView({
   tournament,
   matches,
@@ -418,6 +425,12 @@ export function BracketView({
   matches: BracketMatch[];
   appearance?: PublicAppearance;
 }) {
+  const [detailMatchId, setDetailMatchId] = useState<string | null>(null);
+  const detailMatch = useMemo(
+    () => matches.find((x) => x.id === detailMatchId) ?? null,
+    [matches, detailMatchId],
+  );
+
   const { rounds, byRound, maxRound, champion } = useMemo(() => {
     const byRound = new Map<number, BracketMatch[]>();
     for (const m of matches) {
@@ -434,8 +447,18 @@ export function BracketView({
     return { rounds, byRound, maxRound, champion };
   }, [matches]);
 
-  const colWidth = "w-[300px] min-w-[280px]";
-  const champColWidth = "w-[min(100%,360px)] min-w-[300px] sm:min-w-[340px]";
+  const minRound = rounds[0] ?? 0;
+  const leafRoundMatchCount = byRound.get(minRound)?.length ?? 0;
+  const gridTemplateColumns =
+    rounds.length > 0
+      ? `${rounds.map(() => "minmax(280px,300px)").join(" ")} minmax(300px,360px)`
+      : "minmax(300px,360px)";
+  const gridTemplateRows =
+    leafRoundMatchCount > 0
+      ? `repeat(${leafRoundMatchCount}, auto)`
+      : "auto";
+  const championGridRow =
+    leafRoundMatchCount > 0 ? `1 / ${leafRoundMatchCount + 1}` : "1 / 2";
 
   const headerSurface =
     appearance === "light"
@@ -506,10 +529,13 @@ export function BracketView({
 
       <div className="w-full overflow-x-auto pb-3">
         <div className="mx-auto flex w-max min-w-min flex-col text-left">
-            {/* Round titles — final column no longer holds logo/trophy (moved to header & champion column) */}
-            <div className="flex min-w-min flex-row gap-3 pb-[30px]">
+            {/* Round titles — same column template as the bracket grid below */}
+            <div
+              className="grid min-w-min gap-x-3 pb-[30px]"
+              style={{ gridTemplateColumns }}
+            >
               {rounds.map((ri) => (
-                <div key={`head-${ri}`} className={`flex ${colWidth} shrink-0 flex-col`}>
+                <div key={`head-${ri}`} className="min-w-0">
                   <h2
                     className={
                       appearance === "neon"
@@ -517,11 +543,11 @@ export function BracketView({
                         : roundHeading
                     }
                   >
-                    {roundLabel(ri, maxRound)}
+                    {bracketRoundLabel(ri, maxRound)}
                   </h2>
                 </div>
               ))}
-              <div className={`flex ${champColWidth} shrink-0 flex-col`}>
+              <div className="min-w-0">
                 <h2
                   className={
                     appearance === "neon"
@@ -534,43 +560,57 @@ export function BracketView({
               </div>
             </div>
 
-            <div className="flex min-h-[min(64vh,720px)] min-w-min flex-row items-stretch gap-3">
-              {rounds.map((ri) => {
+            <div
+              className="grid min-h-[min(64vh,720px)] min-w-min items-stretch gap-x-3 gap-y-3"
+              style={{ gridTemplateColumns, gridTemplateRows }}
+            >
+              {rounds.flatMap((ri) => {
                 const roundMatches = (byRound.get(ri) ?? [])
                   .slice()
                   .sort((a, b) => a.positionInRound - b.positionInRound);
-                return (
-                  <div
-                    key={ri}
-                    className={`flex ${colWidth} shrink-0 flex-col items-center pl-3 first:border-l-0 first:pl-0 ${
-                      appearance === "neon"
-                        ? getNeonRoundAccent(ri, maxRound).columnClass
-                        : `border-l ${appearance === "light" ? "border-zinc-200/90" : "border-border/30"}`
-                    }`}
-                  >
-                    <div className="flex min-h-0 w-full flex-1 flex-col items-center">
-                      {roundMatches.map((m) => (
-                        <div
-                          key={m.id}
-                          className="flex min-h-0 w-full flex-1 flex-col items-center justify-center py-0.5"
-                        >
-                          <MatchCard
-                            m={m}
-                            playersPerTeam={tournament.playersPerTeam}
-                            isFinalRound={ri === maxRound}
-                            appearance={appearance}
-                            roundIndex={ri}
-                            maxRound={maxRound}
-                          />
-                        </div>
-                      ))}
+                const colIdx = rounds.indexOf(ri) + 1;
+                const isFirstCol = colIdx === 1;
+                const colFrame =
+                  appearance === "neon"
+                    ? isFirstCol
+                      ? ""
+                      : getNeonRoundAccent(ri, maxRound).columnClass
+                    : isFirstCol
+                      ? ""
+                      : `border-l ${appearance === "light" ? "border-zinc-200/90" : "border-border/30"}`;
+                const colPad = isFirstCol ? "" : "pl-3";
+                return roundMatches.map((m) => {
+                  const { rowStart, rowEnd } = bracketMatchGridLines(
+                    minRound,
+                    ri,
+                    m.positionInRound,
+                  );
+                  return (
+                    <div
+                      key={m.id}
+                      style={{ gridColumn: colIdx, gridRow: `${rowStart} / ${rowEnd}` }}
+                      className={`flex min-h-0 w-full items-center justify-center px-1 ${colPad} ${colFrame}`}
+                    >
+                      <MatchCard
+                        m={m}
+                        playersPerTeam={tournament.playersPerTeam}
+                        isFinalRound={ri === maxRound}
+                        appearance={appearance}
+                        roundIndex={ri}
+                        maxRound={maxRound}
+                        onOpenDetail={() => setDetailMatchId(m.id)}
+                      />
                     </div>
-                  </div>
-                );
+                  );
+                });
               })}
 
               <div
-                className={`flex ${champColWidth} shrink-0 flex-col pl-3 ${
+                style={{
+                  gridColumn: rounds.length + 1,
+                  gridRow: championGridRow,
+                }}
+                className={`flex min-h-0 h-full min-w-0 flex-col pl-3 ${
                   appearance === "neon"
                     ? getNeonChampionAccent().columnClass
                     : `border-l ${appearance === "light" ? "border-emerald-600/15" : "border-emerald-500/20"}`
@@ -587,6 +627,13 @@ export function BracketView({
             </div>
         </div>
       </div>
+
+      <MatchDetailModal
+        match={detailMatch}
+        open={detailMatchId !== null}
+        onClose={() => setDetailMatchId(null)}
+        appearance={appearance}
+      />
     </div>
   );
 }

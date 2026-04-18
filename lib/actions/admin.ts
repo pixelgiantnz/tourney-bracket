@@ -42,14 +42,27 @@ export async function createPlayer(formData: FormData) {
   if (!name) throw new Error("Name required");
   await prisma.player.create({ data: { name } });
   revalidatePath("/admin/players");
+  revalidatePath("/players");
 }
+
+const MAX_PLAYER_BIO_LENGTH = 5000;
 
 export async function updatePlayer(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
+  const bioRaw = String(formData.get("bio") ?? "");
+  const trimmed = bioRaw.trim();
+  const bio =
+    trimmed === ""
+      ? null
+      : trimmed.length > MAX_PLAYER_BIO_LENGTH
+        ? trimmed.slice(0, MAX_PLAYER_BIO_LENGTH)
+        : trimmed;
   if (!id || !name) throw new Error("Invalid");
-  await prisma.player.update({ where: { id }, data: { name } });
+  await prisma.player.update({ where: { id }, data: { name, bio } });
   revalidatePath("/admin/players");
+  revalidatePath("/players");
+  revalidatePath(`/players/${id}`);
 }
 
 export async function deletePlayer(formData: FormData) {
@@ -57,6 +70,7 @@ export async function deletePlayer(formData: FormData) {
   if (!id) throw new Error("Invalid");
   await prisma.player.delete({ where: { id } });
   revalidatePath("/admin/players");
+  revalidatePath("/players");
 }
 
 export async function uploadPlayerAvatar(formData: FormData) {
@@ -71,6 +85,8 @@ export async function uploadPlayerAvatar(formData: FormData) {
   await prisma.player.update({ where: { id }, data: { avatarUrl: url } });
   revalidatePath("/admin/players");
   revalidatePath("/");
+  revalidatePath("/players");
+  revalidatePath(`/players/${id}`);
 }
 
 export async function removePlayerAvatar(formData: FormData) {
@@ -79,6 +95,8 @@ export async function removePlayerAvatar(formData: FormData) {
   await prisma.player.update({ where: { id }, data: { avatarUrl: null } });
   revalidatePath("/admin/players");
   revalidatePath("/");
+  revalidatePath("/players");
+  revalidatePath(`/players/${id}`);
 }
 
 export async function createTournament(formData: FormData) {

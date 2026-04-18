@@ -74,3 +74,20 @@ export function nextMatchPosition(
     slot: positionInRound % 2 === 0 ? "A" : "B",
   };
 }
+
+/**
+ * 1-based CSS grid row lines so a match sits in the band formed by its feeder
+ * first-round matches (classic bracket vertical alignment).
+ * `minRoundIndex` is the earliest round in the bracket (usually 0).
+ */
+export function bracketMatchGridLines(
+  minRoundIndex: number,
+  roundIndex: number,
+  positionInRound: number,
+): { rowStart: number; rowEnd: number } {
+  const depth = Math.max(0, roundIndex - minRoundIndex);
+  const span = 2 ** depth;
+  const rowStart = positionInRound * span + 1;
+  const rowEnd = rowStart + span;
+  return { rowStart, rowEnd };
+}

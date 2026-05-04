@@ -3,6 +3,8 @@
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { MatchDetailModal } from "@/components/match-detail-modal";
+import { PoolLeaderboardModal } from "@/components/pool-leaderboard-modal";
+import { PoolLiveMatchModal } from "@/components/pool-live-match-modal";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { bracketMatchGridLines } from "@/lib/bracket";
 import { bracketRoundLabel } from "@/lib/bracket-round-label";
@@ -30,12 +32,17 @@ export type BracketMatch = {
   positionInRound: number;
   /** Same label as column headers (Final, Semifinals, Round n). */
   roundLabel: string;
+  isLive: boolean;
   teamA: BracketTeam | null;
   teamB: BracketTeam | null;
   winner: BracketTeam | null;
 };
 
 export type BracketTournament = {
+  id: string;
+  slug: string;
+  /** `"POOL"` or `"DEFAULT"` from Prisma enum string. */
+  gameType: string;
   name: string;
   logoUrl: string | null;
   trophyImageUrl: string | null;
@@ -139,6 +146,7 @@ function MatchCard({
   const decided = Boolean(m.winner);
   const teamsReady = Boolean(m.teamA && m.teamB);
   const awaitingTeams = !teamsReady;
+  const liveBadge = m.isLive && !decided;
 
   const neonGlow =
     appearance === "neon" ? getNeonRoundAccent(roundIndex, maxRound).matchShellGlow : "";
@@ -228,7 +236,11 @@ function MatchCard({
           <span
             className={`relative z-10 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${vsPill}`}
           >
-            vs
+            {liveBadge ? (
+              <span className="text-red-500">live</span>
+            ) : (
+              "vs"
+            )}
           </span>
         </div>
         <TeamMatchSide team={m.teamB} playersPerTeam={playersPerTeam} appearance={appearance} />
@@ -420,12 +432,16 @@ export function BracketView({
   tournament,
   matches,
   appearance = "light",
+  canRecordPool = false,
 }: {
   tournament: BracketTournament;
   matches: BracketMatch[];
   appearance?: PublicAppearance;
+  /** Admin or official session — pool stat buttons and live toggles. */
+  canRecordPool?: boolean;
 }) {
   const [detailMatchId, setDetailMatchId] = useState<string | null>(null);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const detailMatch = useMemo(
     () => matches.find((x) => x.id === detailMatchId) ?? null,
     [matches, detailMatchId],
@@ -479,7 +495,8 @@ export function BracketView({
     <div className="w-full">
       {/* Tournament header */}
       <header className={headerSurface}>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+          <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           {tournament.logoUrl ? (
             <div
               className={`relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border sm:h-20 sm:w-20 ${
@@ -524,6 +541,24 @@ export function BracketView({
               {tournament.name}
             </h1>
           </div>
+          </div>
+          {tournament.gameType === "POOL" ? (
+            <div className="flex shrink-0 justify-end sm:pt-1">
+              <button
+                type="button"
+                onClick={() => setLeaderboardOpen(true)}
+                className={`rounded-md border px-3 py-1.5 text-sm font-medium ${
+                  appearance === "light"
+                    ? "border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50"
+                    : appearance === "neon"
+                      ? "border-cyan-400/40 bg-card text-cyan-100 hover:bg-cyan-950/30"
+                      : "border-border bg-card hover:bg-muted/30"
+                }`}
+              >
+                Leaderboard
+              </button>
+            </div>
+          ) : null}
         </div>
       </header>
 
@@ -628,11 +663,31 @@ export function BracketView({
         </div>
       </div>
 
-      <MatchDetailModal
-        match={detailMatch}
-        open={detailMatchId !== null}
-        onClose={() => setDetailMatchId(null)}
+      {tournament.gameType === "POOL" ? (
+        <PoolLiveMatchModal
+          open={detailMatchId !== null}
+          onClose={() => setDetailMatchId(null)}
+          appearance={appearance}
+          slug={tournament.slug}
+          tournamentId={tournament.id}
+          matchId={detailMatchId}
+          canRecord={canRecordPool}
+          initialSnapshot={null}
+        />
+      ) : (
+        <MatchDetailModal
+          match={detailMatch}
+          open={detailMatchId !== null}
+          onClose={() => setDetailMatchId(null)}
+          appearance={appearance}
+        />
+      )}
+
+      <PoolLeaderboardModal
+        open={leaderboardOpen}
+        onClose={() => setLeaderboardOpen(false)}
         appearance={appearance}
+        slug={tournament.slug}
       />
     </div>
   );

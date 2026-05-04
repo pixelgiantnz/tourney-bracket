@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import type { PublicAppearance } from "@/lib/tournament-theme";
 import { slugify } from "@/lib/slug";
 import { deleteTournamentBlobAssets, uploadPublicImage } from "@/lib/uploads";
+import { TournamentGameType } from "@prisma/client";
 import { generateBracket, resetMatchResult, setMatchWinner } from "@/lib/tournament-bracket";
 
 async function revalidateTournamentPublic(tournamentId: string) {
@@ -106,12 +107,16 @@ export async function createTournament(formData: FormData) {
     1,
     parseInt(String(formData.get("playersPerTeam") ?? "2"), 10) || 2,
   );
+  const gameTypeRaw = String(formData.get("gameType") ?? "DEFAULT");
+  const gameType =
+    gameTypeRaw === "POOL" ? TournamentGameType.POOL : TournamentGameType.DEFAULT;
+  const poolRaceTo = Math.max(1, parseInt(String(formData.get("poolRaceTo") ?? "5"), 10) || 5);
   if (!name) throw new Error("Name required");
   if (!slug) slug = slugify(name);
   else slug = slugify(slug);
   try {
     await prisma.tournament.create({
-      data: { name, slug, playersPerTeam },
+      data: { name, slug, playersPerTeam, gameType, poolRaceTo },
     });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
@@ -128,23 +133,38 @@ export async function updateTournamentMeta(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   let slug = String(formData.get("slug") ?? "").trim();
-  const rawAppearance = String(formData.get("publicAppearance") ?? "");
-  const appearance: PublicAppearance =
-    rawAppearance === "light" || rawAppearance === "dark" || rawAppearance === "neon"
-      ? rawAppearance
-      : "light";
+  const gameTypeRaw = String(formData.get("gameType") ?? "DEFAULT");
+  const gameType =
+    gameTypeRaw === "POOL" ? TournamentGameType.POOL : TournamentGameType.DEFAULT;
+  const poolRaceTo = Math.max(1, parseInt(String(formData.get("poolRaceTo") ?? "5"), 10) || 5);
   if (!id || !name) throw new Error("Invalid");
   const before = await prisma.tournament.findUnique({
     where: { id },
     select: { slug: true },
   });
   if (slug) slug = slugify(slug);
+
+  // Only write `theme` when the browser actually submitted `publicAppearance`.
+  // Controls inside a closed `<details>` are omitted from FormData in some browsers,
+  // which used to force `appearance` to default "light" and wipe the saved theme on every save.
+  let appearancePatch: { theme: { appearance: PublicAppearance } } | undefined;
+  if (formData.has("publicAppearance")) {
+    const rawAppearance = String(formData.get("publicAppearance") ?? "");
+    const appearance: PublicAppearance =
+      rawAppearance === "light" || rawAppearance === "dark" || rawAppearance === "neon"
+        ? rawAppearance
+        : "light";
+    appearancePatch = { theme: { appearance } };
+  }
+
   await prisma.tournament.update({
     where: { id },
     data: {
       name,
       ...(slug ? { slug } : {}),
-      theme: { appearance },
+      ...appearancePatch,
+      gameType,
+      poolRaceTo,
     },
   });
   revalidatePath("/admin/tournaments");

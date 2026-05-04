@@ -9,6 +9,7 @@ import {
 import { bracketRoundLabel } from "@/lib/bracket-round-label";
 import { emptyPlayerMatchStats, getStatsForPlayerIds } from "@/lib/player-stats";
 import { prisma } from "@/lib/prisma";
+import { getCanRecordPool } from "@/lib/recorder-auth";
 import { parsePublicAppearance } from "@/lib/tournament-theme";
 
 export const dynamic = "force-dynamic";
@@ -141,6 +142,7 @@ export default async function TournamentPublicPage({
   if (!tournament) notFound();
 
   const statsMap = await getStatsForPlayerIds(collectPlayerIds(tournament));
+  const canRecordPool = await getCanRecordPool();
 
   const appearance = parsePublicAppearance(tournament.theme);
   const ppt = tournament.playersPerTeam;
@@ -152,6 +154,7 @@ export default async function TournamentPublicPage({
     roundIndex: m.roundIndex,
     positionInRound: m.positionInRound,
     roundLabel: bracketRoundLabel(m.roundIndex, maxRound),
+    isLive: m.isLive,
     teamA: toBracketTeam(m.teamA, ppt, statsMap),
     teamB: toBracketTeam(m.teamB, ppt, statsMap),
     winner: m.winner
@@ -176,7 +179,11 @@ export default async function TournamentPublicPage({
       <div className="mx-auto w-full max-w-none px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         <BracketView
           appearance={appearance}
+          canRecordPool={canRecordPool}
           tournament={{
+            id: tournament.id,
+            slug: tournament.slug,
+            gameType: tournament.gameType,
             name: tournament.name,
             logoUrl: tournament.logoUrl,
             trophyImageUrl: tournament.trophyImageUrl,

@@ -13,7 +13,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (pathname === "/login" || pathname === "/admin/login") {
+  if (pathname === "/login" || pathname === "/admin/login" || pathname === "/official/login") {
     return NextResponse.next();
   }
 

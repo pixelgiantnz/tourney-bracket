@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { TournamentGameType } from "@prisma/client";
 import { PendingSubmitButton } from "@/components/pending-submit-button";
 import { prisma } from "@/lib/prisma";
 import { createTournament } from "@/lib/actions/admin";
@@ -36,6 +37,28 @@ export default async function TournamentsPage() {
             min={1}
             max={8}
             defaultValue={2}
+            className="mt-1 w-full max-w-[120px] rounded-md border border-border bg-background px-3 py-2 text-sm"
+          />
+        </label>
+        <label className="block text-sm sm:col-span-2">
+          Game type
+          <select
+            name="gameType"
+            defaultValue={TournamentGameType.DEFAULT}
+            className="mt-1 w-full max-w-xs rounded-md border border-border bg-background px-3 py-2 text-sm"
+          >
+            <option value={TournamentGameType.DEFAULT}>Default bracket</option>
+            <option value={TournamentGameType.POOL}>Pool (billiards)</option>
+          </select>
+        </label>
+        <label className="block text-sm sm:col-span-2">
+          Pool race-to (sunk balls to win a match)
+          <input
+            name="poolRaceTo"
+            type="number"
+            min={1}
+            max={99}
+            defaultValue={5}
             className="mt-1 w-full max-w-[120px] rounded-md border border-border bg-background px-3 py-2 text-sm"
           />
         </label>

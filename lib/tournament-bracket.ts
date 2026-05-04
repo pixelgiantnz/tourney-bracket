@@ -174,7 +174,11 @@ export async function setMatchWinner(matchId: string, winnerTeamId: string) {
     async (tx) => {
       await tx.match.update({
         where: { id: matchId },
-        data: { winnerTeamId },
+        data: {
+          winnerTeamId,
+          isLive: false,
+          proposedWinnerTeamId: null,
+        },
       });
 
       const maxRow = await tx.match.findFirst({
@@ -309,6 +313,11 @@ export async function resetMatchResult(matchId: string) {
 
   await prisma.$transaction(
     async (tx) => {
+      await tx.poolStatEvent.deleteMany({ where: { matchId } });
+      await tx.match.update({
+        where: { id: matchId },
+        data: { isLive: false, proposedWinnerTeamId: null },
+      });
       await clearMatchWinnerAndCascadeTx(tx, m.tournamentId, matchId);
       await syncTournamentStatusTx(tx, m.tournamentId);
     },

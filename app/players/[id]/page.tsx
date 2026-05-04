@@ -2,7 +2,12 @@ import Link from "next/link";
 import Image from "next/image";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { emptyPlayerMatchStats, getStatsForPlayerIds } from "@/lib/player-stats";
+import {
+  emptyPlayerMatchStats,
+  emptyPlayerPoolStats,
+  getPoolStatsForPlayerIds,
+  getStatsForPlayerIds,
+} from "@/lib/player-stats";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +33,8 @@ export default async function PlayerProfilePage({ params }: Props) {
 
   const statsMap = await getStatsForPlayerIds([player.id]);
   const stats = statsMap.get(player.id) ?? emptyPlayerMatchStats;
+  const poolMap = await getPoolStatsForPlayerIds([player.id]);
+  const poolStats = poolMap.get(player.id) ?? emptyPlayerPoolStats;
 
   return (
     <div className="mx-auto max-w-xl px-4 py-8 sm:px-6">
@@ -58,22 +65,56 @@ export default async function PlayerProfilePage({ params }: Props) {
         </div>
         <div className="mt-4 min-w-0 sm:ml-6 sm:mt-0">
           <h1 className="text-2xl font-semibold tracking-tight">{player.name}</h1>
-          <dl className="mt-4 grid grid-cols-3 gap-3 text-center sm:text-left">
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-muted">Played</dt>
-              <dd className="text-lg font-semibold tabular-nums">{stats.played}</dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-muted">Won</dt>
-              <dd className="text-lg font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-                {stats.won}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wide text-muted">Lost</dt>
-              <dd className="text-lg font-semibold tabular-nums">{stats.lost}</dd>
-            </div>
-          </dl>
+          <section className="mt-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">All tournaments</h2>
+            <dl className="mt-2 grid grid-cols-3 gap-3 text-center sm:text-left">
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted">Played</dt>
+                <dd className="text-lg font-semibold tabular-nums">{stats.played}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted">Won</dt>
+                <dd className="text-lg font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                  {stats.won}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted">Lost</dt>
+                <dd className="text-lg font-semibold tabular-nums">{stats.lost}</dd>
+              </div>
+            </dl>
+          </section>
+          <section className="mt-6">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted">Pool (billiards)</h2>
+            <dl className="mt-2 grid grid-cols-3 gap-3 text-center sm:grid-cols-6 sm:text-left">
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted">Played</dt>
+                <dd className="text-lg font-semibold tabular-nums">{poolStats.played}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted">Won</dt>
+                <dd className="text-lg font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                  {poolStats.won}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted">Lost</dt>
+                <dd className="text-lg font-semibold tabular-nums">{poolStats.lost}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted">Sunk</dt>
+                <dd className="text-lg font-semibold tabular-nums">{poolStats.made}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted">Missed</dt>
+                <dd className="text-lg font-semibold tabular-nums">{poolStats.missed}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted">Fouls</dt>
+                <dd className="text-lg font-semibold tabular-nums">{poolStats.foul}</dd>
+              </div>
+            </dl>
+          </section>
         </div>
       </header>
 

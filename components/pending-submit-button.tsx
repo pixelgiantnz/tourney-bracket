@@ -2,7 +2,7 @@
 
 import { useFormStatus } from "react-dom";
 
-function Spinner({ className }: { className?: string }) {
+export function PendingSpinner({ className }: { className?: string }) {
   return (
     <span
       aria-hidden
@@ -38,7 +38,7 @@ export function PendingSubmitButton({
       className={`inline-flex items-center justify-center gap-2 disabled:cursor-not-allowed ${pending ? "cursor-wait" : ""} ${className}`}
       {...props}
     >
-      {pending ? <Spinner /> : null}
+      {pending ? <PendingSpinner /> : null}
       <span className="min-w-0">{children}</span>
     </button>
   );

@@ -35,13 +35,11 @@ function SortableTeamRow({
   tournamentId,
   playersPerTeam,
   allPlayers,
-  rosterFormKey,
 }: {
   team: Team;
   tournamentId: string;
   playersPerTeam: number;
   allPlayers: AdminTeamCardProps["allPlayers"];
-  rosterFormKey: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: team.id,
@@ -72,7 +70,6 @@ function SortableTeamRow({
           tournamentId={tournamentId}
           playersPerTeam={playersPerTeam}
           allPlayers={allPlayers}
-          rosterFormKey={rosterFormKey}
         />
       </div>
     </li>
@@ -88,10 +85,14 @@ export function AdminSortableTeamsList({
   const [orderedIds, setOrderedIds] = useState(() => teams.map((t) => t.id));
   const [, startTransition] = useTransition();
 
-  const idsKey = teams.map((t) => t.id).join(",");
+  /** Server id order — only re-sync when this string changes (not on unrelated `teams` reference churn). */
+  const serverOrderKey = teams.map((t) => t.id).join("|");
   useEffect(() => {
     setOrderedIds(teams.map((t) => t.id));
-  }, [idsKey, teams]);
+    // teams is current for this render whenever serverOrderKey changes; omitting teams from deps avoids
+    // resetting client order on every parent revalidation with an identical roster.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverOrderKey]);
 
   const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
 
@@ -122,6 +123,7 @@ export function AdminSortableTeamsList({
 
   return (
     <DndContext
+      id={`admin-team-seeds-${tournamentId}`}
       sensors={sensors}
       collisionDetection={closestCenter}
       onDragEnd={handleDragEnd}
@@ -135,10 +137,6 @@ export function AdminSortableTeamsList({
               tournamentId={tournamentId}
               playersPerTeam={playersPerTeam}
               allPlayers={allPlayers}
-              rosterFormKey={`${team.id}-roster-${Array.from({ length: playersPerTeam }, (_, i) => {
-                const tp = team.teamPlayers.find((x) => x.slotIndex === i);
-                return tp?.player.id ?? "";
-              }).join(".")}`}
             />
           ))}
         </ul>

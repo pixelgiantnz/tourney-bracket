@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { PlayerAvatar } from "@/components/player-avatar";
-import { PendingSubmitButton } from "@/components/pending-submit-button";
+import { PendingSpinner, PendingSubmitButton } from "@/components/pending-submit-button";
 import {
   deleteTeam,
   saveTeamRoster,
@@ -26,17 +26,50 @@ export type AdminTeamCardProps = {
   tournamentId: string;
   playersPerTeam: number;
   allPlayers: Array<{ id: string; name: string }>;
-  rosterFormKey: string;
 };
+
+function rosterSlotIdsFromTeam(
+  team: AdminTeamCardProps["team"],
+  playersPerTeam: number,
+): string[] {
+  return Array.from({ length: playersPerTeam }, (_, slotIndex) => {
+    const tp = team.teamPlayers.find((x) => x.slotIndex === slotIndex);
+    return tp?.player.id ?? "";
+  });
+}
 
 export function AdminTeamCard({
   team,
   tournamentId,
   playersPerTeam,
   allPlayers,
-  rosterFormKey,
 }: AdminTeamCardProps) {
   const [open, setOpen] = useState(false);
+  const [rosterSaving, setRosterSaving] = useState(false);
+
+  const rosterFingerprint = useMemo(
+    () => rosterSlotIdsFromTeam(team, playersPerTeam).join("|"),
+    [team.teamPlayers, playersPerTeam],
+  );
+
+  const [rosterSlotIds, setRosterSlotIds] = useState(() => rosterSlotIdsFromTeam(team, playersPerTeam));
+
+  useEffect(() => {
+    setRosterSlotIds(rosterSlotIdsFromTeam(team, playersPerTeam));
+    // Only re-sync when server roster content changes, not when `team` is a new object reference.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rosterFingerprint]);
+
+  async function handleRosterSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    setRosterSaving(true);
+    try {
+      await saveTeamRoster(new FormData(form));
+    } finally {
+      setRosterSaving(false);
+    }
+  }
 
   const slots = Array.from({ length: playersPerTeam }, (_, i) => {
     const tp = team.teamPlayers.find((x) => x.slotIndex === i);
@@ -129,19 +162,25 @@ export function AdminTeamCard({
               </PendingSubmitButton>
             </form>
           </div>
-          <form key={rosterFormKey} action={saveTeamRoster} className="space-y-4">
+          <form
+            onSubmit={handleRosterSubmit}
+            className="space-y-4"
+          >
             <input type="hidden" name="teamId" value={team.id} />
             <input type="hidden" name="tournamentId" value={tournamentId} />
             <div className="grid gap-4 sm:grid-cols-2">
               {Array.from({ length: playersPerTeam }, (_, slotIndex) => {
-                const tp = team.teamPlayers.find((x) => x.slotIndex === slotIndex);
-                const selectedId = tp?.player.id ?? "";
                 return (
                   <label key={slotIndex} className="block text-sm">
                     <span className="text-muted">Player {slotIndex + 1}</span>
                     <select
                       name={`slot_${slotIndex}`}
-                      defaultValue={selectedId}
+                      value={rosterSlotIds[slotIndex] ?? ""}
+                      onChange={(e) => {
+                        const next = [...rosterSlotIds];
+                        next[slotIndex] = e.target.value;
+                        setRosterSlotIds(next);
+                      }}
                       className="mt-1 block w-full max-w-full rounded-md border border-border bg-background px-2 py-1"
                     >
                       <option value="">—</option>
@@ -155,9 +194,15 @@ export function AdminTeamCard({
                 );
               })}
             </div>
-            <PendingSubmitButton className="rounded-md border border-border bg-card px-4 py-2 text-sm font-medium hover:border-accent">
-              Save roster
-            </PendingSubmitButton>
+            <button
+              type="submit"
+              disabled={rosterSaving}
+              aria-busy={rosterSaving || undefined}
+              className={`inline-flex items-center justify-center gap-2 rounded-md border border-border bg-card px-4 py-2 text-sm font-medium hover:border-accent disabled:cursor-not-allowed ${rosterSaving ? "cursor-wait" : ""}`}
+            >
+              {rosterSaving ? <PendingSpinner /> : null}
+              <span className="min-w-0">Save roster</span>
+            </button>
           </form>
         </div>
       ) : null}

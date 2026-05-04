@@ -13,6 +13,7 @@ function getSecret(): Uint8Array {
 
 const SITE = "site" as const;
 const ADMIN = "admin" as const;
+const OFFICIAL = "official" as const;
 
 export async function signSiteCookie(): Promise<string> {
   return new SignJWT({ role: SITE })
@@ -24,6 +25,14 @@ export async function signSiteCookie(): Promise<string> {
 
 export async function signAdminCookie(): Promise<string> {
   return new SignJWT({ role: ADMIN })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("7d")
+    .sign(getSecret());
+}
+
+export async function signOfficialCookie(): Promise<string> {
+  return new SignJWT({ role: OFFICIAL })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime("7d")
@@ -45,6 +54,16 @@ export async function verifyAdminCookie(token: string | undefined): Promise<bool
   try {
     const { payload } = await jwtVerify(token, getSecret());
     return payload.role === ADMIN;
+  } catch {
+    return false;
+  }
+}
+
+export async function verifyOfficialCookie(token: string | undefined): Promise<boolean> {
+  if (!token) return false;
+  try {
+    const { payload } = await jwtVerify(token, getSecret());
+    return payload.role === OFFICIAL;
   } catch {
     return false;
   }

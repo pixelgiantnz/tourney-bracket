@@ -8,6 +8,7 @@ import { DeleteTournamentForm } from "@/components/delete-tournament-form";
 import { PendingSubmitButton } from "@/components/pending-submit-button";
 import { prisma } from "@/lib/prisma";
 import { parsePublicAppearance } from "@/lib/tournament-theme";
+import { TournamentGameType } from "@prisma/client";
 import {
   createTeam,
   generateBracketAction,
@@ -25,43 +26,44 @@ export default async function TournamentAdminPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const tournament = await prisma.tournament.findUnique({
-    where: { id },
-    include: {
-      teams: {
-        include: {
-          teamPlayers: { include: { player: true }, orderBy: { slotIndex: "asc" } },
+  const [tournament, allPlayers] = await Promise.all([
+    prisma.tournament.findUnique({
+      where: { id },
+      include: {
+        teams: {
+          include: {
+            teamPlayers: { include: { player: true }, orderBy: { slotIndex: "asc" } },
+          },
+          orderBy: [{ seedOrder: "asc" }, { name: "asc" }],
         },
-        orderBy: [{ seedOrder: "asc" }, { name: "asc" }],
-      },
-      matches: {
-        orderBy: [{ roundIndex: "asc" }, { positionInRound: "asc" }],
-        include: {
-          teamA: {
-            include: {
-              teamPlayers: {
-                include: { player: true },
-                orderBy: { slotIndex: "asc" },
+        matches: {
+          orderBy: [{ roundIndex: "asc" }, { positionInRound: "asc" }],
+          include: {
+            teamA: {
+              include: {
+                teamPlayers: {
+                  include: { player: true },
+                  orderBy: { slotIndex: "asc" },
+                },
               },
             },
-          },
-          teamB: {
-            include: {
-              teamPlayers: {
-                include: { player: true },
-                orderBy: { slotIndex: "asc" },
+            teamB: {
+              include: {
+                teamPlayers: {
+                  include: { player: true },
+                  orderBy: { slotIndex: "asc" },
+                },
               },
             },
+            winner: true,
           },
-          winner: true,
         },
       },
-    },
-  });
+    }),
+    prisma.player.findMany({ orderBy: { name: "asc" } }),
+  ]);
 
   if (!tournament) notFound();
-
-  const allPlayers = await prisma.player.findMany({ orderBy: { name: "asc" } });
   const byRound = new Map<number, typeof tournament.matches>();
   for (const m of tournament.matches) {
     const list = byRound.get(m.roundIndex) ?? [];
@@ -92,7 +94,7 @@ export default async function TournamentAdminPage({
         {tournament.status}
       </p>
 
-      <AdminDisclosure title="Details">
+      <AdminDisclosure title="Details" defaultOpen>
         <form action={updateTournamentMeta} className="grid gap-3 sm:grid-cols-2">
           <input type="hidden" name="id" value={tournament.id} />
           <label className="text-sm">
@@ -125,6 +127,29 @@ export default async function TournamentAdminPage({
             <span className="mt-1 block text-xs text-muted">
               Public /t/… page only; light matches the rest of the site; neon is a dark synthwave-style bracket.
             </span>
+          </label>
+          <label className="text-sm">
+            Game type
+            <select
+              name="gameType"
+              defaultValue={tournament.gameType}
+              className="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+            >
+              <option value={TournamentGameType.DEFAULT}>Default bracket</option>
+              <option value={TournamentGameType.POOL}>Pool (billiards) — live sunk / stats</option>
+            </select>
+          </label>
+          <label className="text-sm">
+            Pool race-to (sunk balls)
+            <input
+              name="poolRaceTo"
+              type="number"
+              min={1}
+              max={99}
+              defaultValue={tournament.poolRaceTo}
+              className="mt-1 w-full max-w-[120px] rounded-md border border-border bg-background px-3 py-2 text-sm"
+            />
+            <span className="mt-1 block text-xs text-muted">First team to this many sunk balls wins the match.</span>
           </label>
           <div className="sm:col-span-2">
             <PendingSubmitButton className="text-sm text-accent underline">Save details</PendingSubmitButton>
@@ -192,7 +217,7 @@ export default async function TournamentAdminPage({
         </div>
       </AdminDisclosure>
 
-      <AdminDisclosure title="Teams">
+      <AdminDisclosure title="Teams" defaultOpen>
         <p className="text-sm text-muted">
           Each team needs {tournament.playersPerTeam} player(s). Drag the handle (⋮⋮) to set seed order (top = seed 1).
           Expand a team to assign players or set seed by number. Leave a slot as — to clear it.

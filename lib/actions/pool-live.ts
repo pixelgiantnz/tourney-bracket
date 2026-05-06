@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { Prisma, PoolStatKind, TournamentGameType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { publishPoolMatchUpdated } from "@/lib/pusher-pool-publish";
 import { getCanRecordPool } from "@/lib/recorder-auth";
 import { computeProposedWinnerTeamId } from "@/lib/pool-match-live";
 import { setMatchWinner } from "@/lib/tournament-bracket";
@@ -11,7 +12,7 @@ import { setMatchWinner } from "@/lib/tournament-bracket";
  * Revalidates admin + public bracket. Optionally home / players (only when bracket-wide outcomes
  * change — skip for hot pool stat writes so the server action returns faster).
  */
-async function revalidatePoolSurfaces(tournamentId: string, globalLists: boolean) {
+async function revalidatePoolSurfaces(tournamentId: string, globalLists: boolean): Promise<{ slug: string | null }> {
   const t = await prisma.tournament.findUnique({
     where: { id: tournamentId },
     select: { slug: true },
@@ -22,6 +23,7 @@ async function revalidatePoolSurfaces(tournamentId: string, globalLists: boolean
     revalidatePath("/");
     revalidatePath("/players");
   }
+  return { slug: t?.slug ?? null };
 }
 
 async function loadMatchForPool(matchId: string) {
@@ -108,7 +110,8 @@ export async function setPoolMatchLiveAction(formData: FormData) {
     where: { id: matchId },
     data: { isLive },
   });
-  await revalidatePoolSurfaces(tournamentId, false);
+  const { slug } = await revalidatePoolSurfaces(tournamentId, false);
+  if (slug) publishPoolMatchUpdated(matchId, slug);
 }
 
 export async function appendPoolStatAction(formData: FormData) {
@@ -164,7 +167,8 @@ export async function appendPoolStatAction(formData: FormData) {
     throw e;
   }
 
-  await revalidatePoolSurfaces(tournamentId, false);
+  const { slug } = await revalidatePoolSurfaces(tournamentId, false);
+  if (slug) publishPoolMatchUpdated(matchId, slug);
 }
 
 export async function undoLastPoolStatAction(formData: FormData) {
@@ -193,7 +197,8 @@ export async function undoLastPoolStatAction(formData: FormData) {
     { maxWait: 15_000, timeout: 30_000 },
   );
 
-  await revalidatePoolSurfaces(tournamentId, false);
+  const { slug } = await revalidatePoolSurfaces(tournamentId, false);
+  if (slug) publishPoolMatchUpdated(matchId, slug);
 }
 
 export async function confirmPoolWinProposalAction(formData: FormData) {
@@ -210,5 +215,6 @@ export async function confirmPoolWinProposalAction(formData: FormData) {
 
   await setMatchWinner(matchId, winnerTeamId);
 
-  await revalidatePoolSurfaces(tournamentId, true);
+  const { slug } = await revalidatePoolSurfaces(tournamentId, true);
+  if (slug) publishPoolMatchUpdated(matchId, slug);
 }

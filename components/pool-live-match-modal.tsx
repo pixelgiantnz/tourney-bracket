@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Pusher from "pusher-js";
 import { startTransition, useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { PlayerAvatar } from "@/components/player-avatar";
 import { PendingSpinner } from "@/components/pending-submit-button";
@@ -14,6 +15,7 @@ import {
   setPoolMatchLiveAction,
   undoLastPoolStatAction,
 } from "@/lib/actions/pool-live";
+import { POOL_MATCH_EVENT, poolMatchChannelName } from "@/lib/pusher-pool-constants";
 
 function surface(appearance: PublicAppearance) {
   return appearance === "light"
@@ -148,6 +150,8 @@ export function PoolLiveMatchModal({
   const [snap, setSnap] = useState<PoolMatchLiveSnapshot | null>(initialSnapshot);
   const [err, setErr] = useState<string | null>(null);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
+  /** When the private channel is subscribed, rely on push + a slow poll fallback. */
+  const [pusherPushReady, setPusherPushReady] = useState(false);
 
   const poll = useCallback(async () => {
     if (!slug || mutatingRef.current) return;
@@ -182,6 +186,38 @@ export function PoolLiveMatchModal({
   }, [slug]);
 
   useEffect(() => {
+    if (!open || !matchId) return;
+    const key = process.env.NEXT_PUBLIC_PUSHER_KEY;
+    const cluster = process.env.NEXT_PUBLIC_PUSHER_CLUSTER;
+    if (!key || !cluster) return;
+
+    const pusher = new Pusher(key, {
+      cluster,
+      authEndpoint: "/api/pusher/auth",
+      authTransport: "ajax",
+    });
+    const channelName = poolMatchChannelName(matchId);
+    const channel = pusher.subscribe(channelName);
+    const onUpdated = () => {
+      void poll();
+    };
+    channel.bind(POOL_MATCH_EVENT, onUpdated);
+    const onSubOk = () => setPusherPushReady(true);
+    const onSubErr = () => setPusherPushReady(false);
+    channel.bind("pusher:subscription_succeeded", onSubOk);
+    channel.bind("pusher:subscription_error", onSubErr);
+
+    return () => {
+      channel.unbind(POOL_MATCH_EVENT, onUpdated);
+      channel.unbind("pusher:subscription_succeeded", onSubOk);
+      channel.unbind("pusher:subscription_error", onSubErr);
+      pusher.unsubscribe(channelName);
+      pusher.disconnect();
+      setPusherPushReady(false);
+    };
+  }, [open, matchId, poll]);
+
+  useEffect(() => {
     const d = dialogRef.current;
     if (!d) return;
     if (open && matchId) {
@@ -193,7 +229,7 @@ export function PoolLiveMatchModal({
     }
   }, [open, matchId, initialSnapshot]);
 
-  const pollIntervalMs = snap?.isLive === true ? 750 : 2400;
+  const pollIntervalMs = pusherPushReady ? 12_000 : snap?.isLive === true ? 750 : 2400;
 
   useEffect(() => {
     if (!open || !matchId) return;
